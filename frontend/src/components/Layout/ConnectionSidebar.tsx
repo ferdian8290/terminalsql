@@ -600,7 +600,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
               </button>
             )}
 
-            <div className="relative shrink-0 flex items-center justify-center">
+            <div className="shrink-0 flex items-center justify-center">
               {isDb ? (
                 getDatabaseIcon(conn)
               ) : isSsh ? (
@@ -608,21 +608,12 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
               ) : (
                 <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-amber-400' : 'text-zinc-400'}`} />
               )}
-
-              {isConnected && (
-                <span
-                  className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-zinc-950 flex items-center justify-center"
-                  title="Connected Active Session"
-                >
-                  <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
-                </span>
-              )}
             </div>
 
             <TooltipProvider delayDuration={350}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="text-[11px] font-medium truncate leading-none cursor-pointer flex-1">
+                  <span className="text-[11px] font-medium truncate leading-none cursor-pointer">
                     {conn.name}
                   </span>
                 </TooltipTrigger>
@@ -631,6 +622,13 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+
+            {isConnected && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse"
+                title="Active Session Connected"
+              />
+            )}
           </div>
 
           {/* Right: Connect or Expand/Collapse Button (Always visible on hover, strictly 1-word tooltip) */}
