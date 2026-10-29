@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.3.1-purple)
+![Version](https://img.shields.io/badge/Version-1.3.2-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -13,7 +13,7 @@
 
 ## Overview
 
-TerminalSQL brings the productivity and density of enterprise desktop clients (such as DBeaver, TablePlus, Warp, and Termius) directly into a lightweight, high-performance web application. It runs either as a single unified service or containerized via Docker.
+TerminalSQL brings the productivity and density of enterprise desktop clients directly into a lightweight, high-performance web application. It runs either as a single unified service or containerized via Docker.
 
 ---
 
@@ -29,7 +29,7 @@ TerminalSQL brings the productivity and density of enterprise desktop clients (s
 | 🔒 **Safe Mode** | Read-Only safety lock enabled by default with a dedicated amber toolbar badge preventing unintended DDL/DML mutations. |
 | 📊 **High-Density Results Table** | Smooth horizontal and vertical scrolling with CSS `sticky` headers and sticky `#` row index. Cell value click-to-copy, column sorting, and instant row search filtering with live match counters. |
 | 📤 **Advanced Export Suite** | **Semicolon (`;`) default** CSV delimiter (standard enterprise / Excel format). Quick export dropdown for Comma (`,`), Tab (`\t`), Pipe (`\|`), JSON, and an Advanced Export Modal with live formatted previews, custom quotes, and header toggles. |
-| 🌳 **DBeaver Schema Navigator** | Centralized left sidebar with hierarchical database trees categorized into **Tables**, **Foreign Tables**, **Views**, and **Materialized Views** with DBeaver-style icons and column introspection. |
+| 🌳 **Hierarchical Schema Navigator** | Centralized left sidebar with database trees categorized into **Tables**, **Foreign Tables**, **Views**, and **Materialized Views** with structured icons and column introspection. |
 | 📁 **SFTP File Manager** | Remote file browsing, drag-and-drop upload, chunked downloads, directory navigation, rename, permissions, and clean empty-state staging. |
 | 📱 **Mobile & Zoom Responsive** | Adaptive off-canvas drawer navigation for mobile viewports (`< 768px`), responsive toolbar wrapping, and zoom scalability up to 200%. |
 | 🛡️ **Native Desktop App Guard** | Complete elimination of default browser context menus in favor of dark custom context menus. Blocks accidental browser back/forward gestures from mouse side buttons (Mouse 4/5), trackpad swipes (`overscroll-behavior: none`), and `Alt+ArrowLeft`. |
@@ -285,5 +285,5 @@ DB_PATH=/app/data/terminalsql.db
 TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 - **High-Density Typography**: Item sidebar dan tree berukuran compact `11px` (tinggi baris `20px`); toolbar & input `11.5px` ~ `12px`; badge & mono `9.5px` ~ `10px`.
 - **Zero Browser Context Menus**: Klik kanan browser default diblokir sepenuhnya dan digantikan oleh custom dark context menu.
-- **DBeaver Categorized Tree**: Schema dikelompokkan ke dalam 4 folder standar (Tables, Foreign Tables, Views, Materialized Views).
+- **Categorized Schema Tree**: Schema dikelompokkan ke dalam 4 folder standar (Tables, Foreign Tables, Views, Materialized Views).
 - **Monaco SQL Priority**: Shortcut `Ctrl+Enter` memprioritaskan teks SQL yang di-blok/highlight sebelum mengeksekusi seluruh isi query editor.

@@ -1,7 +1,7 @@
 # TerminalSQL - Agent Instructions & Architecture Guidelines
 
 ## Native Desktop App Paradigm
-This project is treated as a **Native Desktop Application** (similar to VS Code, DBeaver, TablePlus, Warp, Termius).
+This project is treated as a **Native Desktop Application** (similar to professional enterprise desktop clients).
 When designing and developing interfaces, components, and interactions for this project:
 
 1. **Native Context Menus Only (Never Browser Default)**:

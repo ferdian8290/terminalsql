@@ -794,7 +794,7 @@ export async function databaseRoutes(app: FastifyInstance) {
             if (!schema[col.tableName]) schema[col.tableName] = schema[fullKey];
           }
 
-          // 4. Construct DBeaver-style database tree
+          // 4. Construct hierarchical database tree
           const databases = dbNames.map((dbName) => {
             const dbTables = allTables.filter((t) => t.database === dbName);
             return {

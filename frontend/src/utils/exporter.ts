@@ -37,12 +37,11 @@ export function exportToTerminalSqlJson(connections: any[]) {
 }
 
 /**
- * Export database connections to DBeaver data-sources.json format
- * Compatible with DBeaver import or placing in .dbeaver/data-sources.json
+ * Export database connections to universal data-sources.json format
  */
-export function exportToDBeaverJson(connections: any[]) {
+export function exportToDataSourceJson(connections: any[]) {
   const dbConns = connections.filter((c) => c.type === 'database');
-  const dbeaverConnections: Record<string, any> = {};
+  const dsConnections: Record<string, any> = {};
 
   dbConns.forEach((conn, index) => {
     const creds = conn.credentials || {};
@@ -52,7 +51,7 @@ export function exportToDBeaverJson(connections: any[]) {
 
     const connId = `${dbType}-${Date.now().toString(16)}-${index}`;
 
-    dbeaverConnections[connId] = {
+    dsConnections[connId] = {
       name: conn.name,
       provider: dbType === 'postgres' ? 'postgresql' : dbType,
       driver: driverId,
@@ -75,7 +74,7 @@ export function exportToDBeaverJson(connections: any[]) {
 
   const payload = {
     folders: {},
-    connections: dbeaverConnections,
+    connections: dsConnections,
     'connection-types': {
       dev: {
         name: 'Development',
@@ -88,9 +87,12 @@ export function exportToDBeaverJson(connections: any[]) {
     },
   };
 
-  const filename = `dbeaver-data-sources-${new Date().toISOString().slice(0, 10)}.json`;
+  const filename = `data-sources-${new Date().toISOString().slice(0, 10)}.json`;
   downloadBlob(JSON.stringify(payload, null, 2), filename, 'application/json');
 }
+
+// Backwards compatibility alias
+export const exportToDBeaverJson = exportToDataSourceJson;
 
 /**
  * Export SSH & SFTP connections to MobaXterm .mxtsessions file

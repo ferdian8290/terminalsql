@@ -106,7 +106,7 @@ export function ConnectionManager() {
             size="sm"
             onClick={() => setShowImportExport(true)}
             className="border-zinc-800 text-zinc-300 hover:text-white text-xs h-8 px-2.5 gap-1.5"
-            title="Import / Export (DBeaver, MobaXterm, FileZilla, Termius)"
+            title="Import / Export Connections"
           >
             <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
             Import / Export

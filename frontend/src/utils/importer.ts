@@ -27,13 +27,13 @@ export interface ParseResult {
 
 /**
  * Universal Connection Parser
- * Auto-detects format from DBeaver, MobaXterm, FileZilla, SecureCRT, Termius, or TerminalSQL.
+ * Auto-detects format from standard data sources, session managers, XML, CSV, or TerminalSQL.
  */
 export function parseConnectionFile(content: string, filename = ''): ParseResult {
   const trimmed = content.trim();
   const lowerName = filename.toLowerCase();
 
-  // 1. Check if JSON (DBeaver, Termius, or TerminalSQL)
+  // 1. Check if JSON (Standard data sources, Termius, or TerminalSQL)
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const json = JSON.parse(trimmed);
@@ -58,7 +58,7 @@ export function parseConnectionFile(content: string, filename = ''): ParseResult
         };
       }
 
-      // DBeaver data-sources.json
+      // Standard data-sources.json
       if (json.connections && typeof json.connections === 'object') {
         const conns: ParsedConnection[] = [];
         for (const [key, val] of Object.entries<any>(json.connections)) {
@@ -83,14 +83,14 @@ export function parseConnectionFile(content: string, filename = ''): ParseResult
               dbType,
               ssl: false,
             },
-            tags: ['dbeaver', dbType],
+            tags: ['datasource', dbType],
             color: '#a855f7',
             sourceTool: 'dbeaver',
           });
         }
 
         return {
-          detectedTool: 'DBeaver (data-sources.json)',
+          detectedTool: 'Standard Data Sources (data-sources.json)',
           connections: conns,
           errors: [],
         };
@@ -299,7 +299,7 @@ export function parseConnectionFile(content: string, filename = ''): ParseResult
     detectedTool: 'Unknown format',
     connections: [],
     errors: [
-      'Unrecognized connection file format. Please upload DBeaver (data-sources.json), MobaXterm (.mxtsessions), FileZilla (.xml), SecureCRT (CSV/XML), Termius (JSON/CSV), or TerminalSQL backup.',
+      'Unrecognized connection file format. Please upload standard data-sources.json, session files (.mxtsessions), XML, CSV, or TerminalSQL backup.',
     ],
   };
 }

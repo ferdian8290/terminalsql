@@ -14,7 +14,7 @@ import toast from 'react-hot-toast';
 import { parseConnectionFile, ParsedConnection } from '@/utils/importer';
 import {
   exportToTerminalSqlJson,
-  exportToDBeaverJson,
+  exportToDataSourceJson,
   exportToMobaXtermSessions,
   exportToCsv,
 } from '@/utils/exporter';
@@ -133,7 +133,7 @@ export function ImportExportModal({ onClose, defaultTab = 'import' }: Props) {
     }
   }
 
-  async function handleExportDBeaver() {
+  async function handleExportDataSources() {
     setExporting(true);
     try {
       const res = await api.connections.export(true);
@@ -142,8 +142,8 @@ export function ImportExportModal({ onClose, defaultTab = 'import' }: Props) {
         toast.error('No database connections found to export');
         return;
       }
-      exportToDBeaverJson(res.connections);
-      toast.success(`Exported ${dbs.length} database connections for DBeaver`);
+      exportToDataSourceJson(res.connections);
+      toast.success(`Exported ${dbs.length} database connections`);
     } catch (err: any) {
       toast.error('Export failed: ' + err.message);
     } finally {
@@ -195,7 +195,7 @@ export function ImportExportModal({ onClose, defaultTab = 'import' }: Props) {
             </Badge>
           </div>
           <DialogDescription className="text-zinc-400 text-[11px]">
-            Migrate sessions seamlessly with DBeaver, MobaXterm, FileZilla, SecureCRT, and Termius.
+            Migrate sessions seamlessly with universal formats (JSON, XML, Sessions, CSV).
           </DialogDescription>
         </DialogHeader>
 
@@ -225,7 +225,7 @@ export function ImportExportModal({ onClose, defaultTab = 'import' }: Props) {
                   Drop your connection file or click to browse
                 </p>
                 <p className="text-[11px] text-zinc-500 mt-1 max-w-sm">
-                  Supports <strong className="text-zinc-300">DBeaver</strong> (data-sources.json), <strong className="text-zinc-300">MobaXterm</strong> (.mxtsessions), <strong className="text-zinc-300">FileZilla</strong> (sitemanager.xml), <strong className="text-zinc-300">SecureCRT</strong>, <strong className="text-zinc-300">Termius</strong>, and TerminalSQL backup.
+                  Supports <strong className="text-zinc-300">data-sources.json</strong>, <strong className="text-zinc-300">session files</strong> (.mxtsessions), <strong className="text-zinc-300">XML</strong> (sitemanager), <strong className="text-zinc-300">CSV</strong>, and TerminalSQL backup.
                 </p>
                 <Button size="sm" variant="outline" className="mt-3.5 h-7 px-3 text-xs border-zinc-800 text-zinc-300 hover:text-white">
                   Browse File
@@ -455,16 +455,16 @@ export function ImportExportModal({ onClose, defaultTab = 'import' }: Props) {
                 </div>
               </div>
 
-              {/* Option 2: DBeaver data-sources.json */}
+              {/* Option 2: Universal data-sources.json */}
               <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 transition-colors flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-purple-400 shrink-0">
                     <Database className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-zinc-200">DBeaver (data-sources.json)</p>
+                    <p className="text-xs font-semibold text-zinc-200">Universal Data Sources (data-sources.json)</p>
                     <p className="text-[11px] text-zinc-500 truncate">
-                      Export all databases into DBeaver data-sources format for direct import.
+                      Export all databases into universal data-sources format for direct import.
                     </p>
                   </div>
                 </div>
@@ -472,11 +472,11 @@ export function ImportExportModal({ onClose, defaultTab = 'import' }: Props) {
                   size="sm"
                   variant="outline"
                   disabled={exporting}
-                  onClick={handleExportDBeaver}
+                  onClick={handleExportDataSources}
                   className="h-7 px-2.5 text-xs border-zinc-800 text-zinc-300 hover:text-white shrink-0"
                 >
                   <Download className="w-3 h-3 mr-1 text-purple-400" />
-                  Export DBeaver
+                  Export Data Sources
                 </Button>
               </div>
 

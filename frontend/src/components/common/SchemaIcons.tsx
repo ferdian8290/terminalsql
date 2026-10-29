@@ -27,7 +27,7 @@ export function DbCylinderIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { classNa
   );
 }
 
-export function DBeaverFolderIcon({
+export function SchemaFolderIcon({
   className = 'w-3.5 h-3.5 shrink-0',
   open = false,
 }: {
@@ -59,7 +59,7 @@ export function DBeaverFolderIcon({
   );
 }
 
-export function DBeaverTableIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
+export function SchemaTableIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className}>
       <rect
@@ -81,7 +81,7 @@ export function DBeaverTableIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { class
   );
 }
 
-export function DBeaverForeignTableIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
+export function SchemaForeignTableIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className}>
       <rect
@@ -103,7 +103,7 @@ export function DBeaverForeignTableIcon({ className = 'w-3.5 h-3.5 shrink-0' }: 
   );
 }
 
-export function DBeaverViewIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
+export function SchemaViewIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className}>
       <rect
@@ -125,7 +125,7 @@ export function DBeaverViewIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { classN
   );
 }
 
-export function DBeaverMatViewIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
+export function SchemaMatViewIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className}>
       <rect
@@ -148,7 +148,7 @@ export function DBeaverMatViewIcon({ className = 'w-3.5 h-3.5 shrink-0' }: { cla
   );
 }
 
-export function DBeaverFolderBranchIcon({
+export function SchemaFolderBranchIcon({
   kind,
   open = false,
   className = 'w-3.5 h-3.5 shrink-0',
@@ -203,3 +203,4 @@ export function DBeaverFolderBranchIcon({
     </svg>
   );
 }
+

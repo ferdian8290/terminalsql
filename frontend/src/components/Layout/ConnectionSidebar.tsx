@@ -8,12 +8,12 @@ import {
 } from 'lucide-react';
 import {
   DbCylinderIcon,
-  DBeaverTableIcon,
-  DBeaverForeignTableIcon,
-  DBeaverViewIcon,
-  DBeaverMatViewIcon,
-  DBeaverFolderBranchIcon,
-} from '@/components/common/DBeaverIcons';
+  SchemaTableIcon,
+  SchemaForeignTableIcon,
+  SchemaViewIcon,
+  SchemaMatViewIcon,
+  SchemaFolderBranchIcon,
+} from '@/components/common/SchemaIcons';
 import { useAppStore, Connection } from '@/store/appStore';
 import { api } from '@/utils/api';
 import toast from 'react-hot-toast';
@@ -93,7 +93,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
   const [editingConn, setEditingConn] = useState<Connection | null>(null);
   const [newConnInitialFolder, setNewConnInitialFolder] = useState<string | undefined>(undefined);
 
-  // DBeaver Database tree expansion state
+  // Database tree expansion state
   const [expandedConnTree, setExpandedConnTree] = useState<Record<string, boolean>>({});
   const [connSchemas, setConnSchemas] = useState<Record<string, { loading: boolean; databases?: any[]; schema?: Record<string, any[]>; error?: string }>>({});
   const [expandedDbNodes, setExpandedDbNodes] = useState<Record<string, boolean>>({});
@@ -685,7 +685,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
           </div>
         </div>
 
-        {/* DBeaver-style Hierarchical Database Navigator */}
+        {/* Hierarchical Database Navigator */}
         {isDb && isTreeExpanded && (
           <div className="ml-3 pl-1.5 border-l border-border space-y-0.5 my-0.5 select-none font-sans">
             {connSchemas[conn.id]?.loading ? (
@@ -715,7 +715,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
 
                 return (
                   <div key={db.name}>
-                    {/* Database Item (DBeaver blue cylinder) */}
+                    {/* Database Item */}
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
@@ -740,32 +740,32 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                             key: 'tables',
                             label: 'Tables',
                             items: db.tables || [],
-                            icon: (open: boolean) => <DBeaverFolderBranchIcon kind="tables" open={open} />,
-                            itemIcon: () => <DBeaverTableIcon />,
+                            icon: (open: boolean) => <SchemaFolderBranchIcon kind="tables" open={open} />,
+                            itemIcon: () => <SchemaTableIcon />,
                             shouldShow: true,
                           },
                           {
                             key: 'foreignTables',
                             label: 'Foreign Tables',
                             items: db.foreignTables || [],
-                            icon: (open: boolean) => <DBeaverFolderBranchIcon kind="foreignTables" open={open} />,
-                            itemIcon: () => <DBeaverForeignTableIcon />,
+                            icon: (open: boolean) => <SchemaFolderBranchIcon kind="foreignTables" open={open} />,
+                            itemIcon: () => <SchemaForeignTableIcon />,
                             shouldShow: (db.foreignTables && db.foreignTables.length > 0) || (conn as any).dbType === 'postgres' || (conn as any).dbType === 'postgresql',
                           },
                           {
                             key: 'views',
                             label: 'Views',
                             items: db.views || [],
-                            icon: (open: boolean) => <DBeaverFolderBranchIcon kind="views" open={open} />,
-                            itemIcon: () => <DBeaverViewIcon />,
+                            icon: (open: boolean) => <SchemaFolderBranchIcon kind="views" open={open} />,
+                            itemIcon: () => <SchemaViewIcon />,
                             shouldShow: (db.views && db.views.length > 0) || (conn as any).dbType === 'postgres' || (conn as any).dbType === 'postgresql' || (conn as any).dbType === 'clickhouse',
                           },
                           {
                             key: 'materializedViews',
                             label: 'Materialized Views',
                             items: db.materializedViews || [],
-                            icon: (open: boolean) => <DBeaverFolderBranchIcon kind="materializedViews" open={open} />,
-                            itemIcon: () => <DBeaverMatViewIcon />,
+                            icon: (open: boolean) => <SchemaFolderBranchIcon kind="materializedViews" open={open} />,
+                            itemIcon: () => <SchemaMatViewIcon />,
                             shouldShow: (db.materializedViews && db.materializedViews.length > 0) || (conn as any).dbType === 'postgres' || (conn as any).dbType === 'postgresql' || (conn as any).dbType === 'clickhouse',
                           },
                         ]
@@ -976,7 +976,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              <p>Import / Export (DBeaver, MobaXterm, FileZilla)</p>
+              <p>Import / Export Connections</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -1772,7 +1772,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
             className="fixed z-50 w-52 bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl py-1 text-xs text-zinc-300 select-none animate-in fade-in-0 zoom-in-95 duration-75"
           >
             <div className="px-2.5 py-1 text-[10.5px] text-zinc-400 border-b border-zinc-800/80 flex items-center gap-1.5 truncate font-mono">
-              <DBeaverTableIcon />
+              <SchemaTableIcon />
               <span className="truncate font-semibold text-white">
                 {tableContextMenu.dbName}.{tableContextMenu.tableName}
               </span>

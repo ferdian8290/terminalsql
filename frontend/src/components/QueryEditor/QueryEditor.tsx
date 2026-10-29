@@ -139,7 +139,7 @@ export function splitSqlStatements(sql: string): StatementRange[] {
     if (char === '"') { inDoubleQuote = true; continue; }
     if (char === '`') { inBacktick = true; continue; }
 
-    // Semicolon delimiter (DBeaver standard)
+    // Semicolon delimiter
     if (char === ';') {
       const raw = sql.substring(currentStart, i + 1);
       if (raw.trim()) {
@@ -153,7 +153,7 @@ export function splitSqlStatements(sql: string): StatementRange[] {
       continue;
     }
 
-    // Blank line delimiter (DBeaver standard: 2 or more consecutive newlines with only whitespace)
+    // Blank line delimiter (2 or more consecutive newlines with only whitespace)
     if (char === '\n') {
       let j = i + 1;
       while (j < sql.length && (sql[j] === ' ' || sql[j] === '\t' || sql[j] === '\r')) j++;
@@ -452,7 +452,7 @@ export function QueryEditor({ tab }: Props) {
   const runQueryRef = useRef<() => void>(() => {});
   const lastExecutedQueryRef = useRef<string>('');
 
-  // DBeaver parameter binding states
+  // Query parameter binding states
   const [isParamModalOpen, setIsParamModalOpen] = useState(false);
   const [pendingQuerySql, setPendingQuerySql] = useState('');
   const [pendingQueryParams, setPendingQueryParams] = useState<Record<string, string>>({});
@@ -732,7 +732,7 @@ export function QueryEditor({ tab }: Props) {
           q = selected.replace(/;+\s*$/, '').trim();
         }
       } else if (model) {
-        // Priority 2 (DBeaver standard): Execute the SQL statement at current cursor position
+        // Priority 2: Execute the SQL statement at current cursor position
         const fullText = model.getValue();
         const position = editor.getPosition() || { lineNumber: 1, column: 1 };
         const cursorOffset = model.getOffsetAt(position);
@@ -747,7 +747,7 @@ export function QueryEditor({ tab }: Props) {
       return;
     }
 
-    // Check for DBeaver query parameters (:param or ${param})
+    // Check for query parameters (:param or ${param})
     const params = detectSqlParameters(q);
     if (params.length > 0) {
       setPendingQuerySql(q);
@@ -768,7 +768,7 @@ export function QueryEditor({ tab }: Props) {
   useEffect(() => {
     if (!isActive) return;
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Support Ctrl+Enter, Cmd+Enter, Alt+Ctrl+Enter, and Alt+Enter (DBeaver standards)
+      // Support Ctrl+Enter, Cmd+Enter, Alt+Ctrl+Enter, and Alt+Enter
       if (e.key === 'Enter' && ((e.ctrlKey || e.metaKey) || e.altKey)) {
         e.preventDefault();
         e.stopPropagation();
@@ -801,7 +801,7 @@ export function QueryEditor({ tab }: Props) {
 
     editor.addAction({
       id: 'execute-sql-query',
-      label: 'Execute SQL Statement at Cursor (DBeaver Mode)',
+      label: 'Execute SQL Statement at Cursor',
       keybindings: [
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
         monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.Enter,
@@ -1630,7 +1630,7 @@ export function QueryEditor({ tab }: Props) {
         </ResizablePanel>
       </ResizablePanelGroup>
 
-      {/* DBeaver Query Parameters Modal */}
+      {/* Query Parameters Modal */}
       <Dialog open={isParamModalOpen} onOpenChange={setIsParamModalOpen}>
         <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100 sm:max-w-[440px] p-4 shadow-2xl">
           <DialogHeader className="space-y-1 pb-2 border-b border-zinc-800/80">
@@ -1640,7 +1640,7 @@ export function QueryEditor({ tab }: Props) {
                 Bind Query Parameters
               </DialogTitle>
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 ml-auto">
-                DBeaver Mode
+                Statement Mode
               </span>
             </div>
             <DialogDescription className="text-[11px] text-zinc-400">
