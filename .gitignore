@@ -34,6 +34,12 @@ scratch/
 .temp/
 .cache/
 
+# Docker image archives
+*.tar
+*.tar.gz
+docker-images/*.tar.gz
+docker-images/*.tar
+
 # OS & Editor
 .DS_Store
 Thumbs.db

@@ -78,24 +78,43 @@ if [[ "$ACTION" == "stop" || "$ACTION" == "down" ]]; then
 fi
 
 # Full Deployment Workflow
-TAR_FILE="/tmp/terminalsql-docker-images-$$.tar.gz"
-trap 'rm -f "$TAR_FILE"' EXIT
+DOCKER_IMG_DIR="${LOCAL_DIR}/docker-images"
+mkdir -p "$DOCKER_IMG_DIR"
+TAR_FILE="${DOCKER_IMG_DIR}/terminalsql-images.tar.gz"
 
-# 2. Build Images Locally
-echo -e "\n${YELLOW}🔨 [2/6] Building production Docker images locally...${NC}"
-cd "$LOCAL_DIR"
-docker build --network host -t terminalsql-backend:latest ./backend
-docker build --network host -t terminalsql-frontend:latest ./frontend
-echo -e "${GREEN}✓ Local Docker images built successfully.${NC}"
+# Check if local and remote images already match
+echo -e "\n${YELLOW}🔎 [2/6] Checking Docker image hash between local and remote...${NC}"
+LOCAL_IMG_HASH=$(docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' 2>/dev/null | sha256sum | awk '{print $1}' || echo "LOCAL_BUILD_NEEDED")
+REMOTE_IMG_HASH=$(ssh -o BatchMode=yes "$REMOTE_HOST" "cat ${REMOTE_DIR}/.remote_image_hash 2>/dev/null || docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' 2>/dev/null | sha256sum | awk '{print \$1}'" 2>/dev/null || echo "REMOTE_FETCH_NEEDED")
 
-# 3. Export Images to Archive
-echo -e "\n${YELLOW}📦 [3/6] Exporting images to compressed offline archive...${NC}"
-docker save terminalsql-backend:latest terminalsql-frontend:latest | gzip > "$TAR_FILE"
-ARCHIVE_SIZE=$(du -h "$TAR_FILE" | cut -f1)
-echo -e "${GREEN}✓ Exported image archive ready (${ARCHIVE_SIZE}).${NC}"
+NEED_IMAGE_SYNC=true
+if [[ "$LOCAL_IMG_HASH" == "$REMOTE_IMG_HASH" && "$LOCAL_IMG_HASH" != "LOCAL_BUILD_NEEDED" && "$ACTION" != "force" && -f "$TAR_FILE" ]]; then
+  NEED_IMAGE_SYNC=false
+  echo -e "${GREEN}✓ Remote Docker daemon already has the exact image build (${LOCAL_IMG_HASH:0:12}).${NC}"
+  echo -e "${CYAN}⚡ Fast-sync mode: Skipping 150MB image transfer. Synchronizing only configuration & metadata...${NC}"
+fi
 
-# 4. Synchronize Codebase & Configs (Preserving remote database!)
-echo -e "\n${YELLOW}🚀 [4/6] Synchronizing configs and codebase to ${REMOTE_HOST}:${REMOTE_DIR}...${NC}"
+if [[ "$NEED_IMAGE_SYNC" == "true" ]]; then
+  # 2. Build Images Locally
+  echo -e "\n${YELLOW}🔨 Building production Docker images locally...${NC}"
+  cd "$LOCAL_DIR"
+  docker build --network host -t terminalsql-backend:latest ./backend
+  docker build --network host -t terminalsql-frontend:latest ./frontend
+  echo -e "${GREEN}✓ Local Docker images built successfully.${NC}"
+
+  # Update hash after build
+  LOCAL_IMG_HASH=$(docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' | sha256sum | awk '{print $1}')
+  echo "$LOCAL_IMG_HASH" > "${DOCKER_IMG_DIR}/.image_hash"
+
+  # 3. Export Images to Persistent Local Archive (Never in /tmp)
+  echo -e "\n${YELLOW}📦 [3/6] Saving images to persistent archive: ${TAR_FILE}...${NC}"
+  docker save terminalsql-backend:latest terminalsql-frontend:latest | gzip > "$TAR_FILE"
+  ARCHIVE_SIZE=$(du -h "$TAR_FILE" | cut -f1)
+  echo -e "${GREEN}✓ Image archive ready in project directory (${ARCHIVE_SIZE}).${NC}"
+fi
+
+# 4. Synchronize Codebase & Configs (Strictly preserving remote database & excluding image binaries)
+echo -e "\n${YELLOW}🚀 [4/6] Synchronizing configs and metadata to ${REMOTE_HOST}:${REMOTE_DIR}...${NC}"
 ssh -o BatchMode=yes "$REMOTE_HOST" "mkdir -p ${REMOTE_DIR} ${REMOTE_DIR}/backend/data"
 
 rsync -avz \
@@ -107,6 +126,9 @@ rsync -avz \
   --exclude="*.log" \
   --exclude="backend/data/*.db*" \
   --exclude="data/*.db*" \
+  --exclude="docker-images" \
+  --exclude="*.tar.gz" \
+  --exclude="*.tar" \
   "${LOCAL_DIR}/" \
   "${REMOTE_HOST}:${REMOTE_DIR}/"
 
@@ -169,17 +191,21 @@ EOF"
 
 echo -e "${GREEN}✓ Codebase & compose configurations synchronized.${NC}"
 
-# 5. Transfer & Load Images on Remote Server
-echo -e "\n${YELLOW}🚚 [5/6] Transferring and loading offline images on ${REMOTE_HOST}...${NC}"
-rsync -avz --progress "$TAR_FILE" "${REMOTE_HOST}:${REMOTE_DIR}/terminalsql-images.tar.gz"
+# 5. Transfer & Load Images on Remote Server (Only if image sync needed)
+if [[ "$NEED_IMAGE_SYNC" == "true" ]]; then
+  echo -e "\n${YELLOW}🚚 [5/6] Transferring and loading offline images on ${REMOTE_HOST}...${NC}"
+  rsync -avz --progress "$TAR_FILE" "${REMOTE_HOST}:${REMOTE_DIR}/terminalsql-images.tar.gz"
 
-echo -e "${CYAN}➜ Loading images into remote Docker daemon...${NC}"
-ssh -o BatchMode=yes "$REMOTE_HOST" "docker load -i ${REMOTE_DIR}/terminalsql-images.tar.gz && rm -f ${REMOTE_DIR}/terminalsql-images.tar.gz"
-echo -e "${GREEN}✓ Remote Docker images updated and loaded successfully.${NC}"
+  echo -e "${CYAN}➜ Loading images into remote Docker daemon...${NC}"
+  ssh -o BatchMode=yes "$REMOTE_HOST" "docker load -i ${REMOTE_DIR}/terminalsql-images.tar.gz && rm -f ${REMOTE_DIR}/terminalsql-images.tar.gz && echo '${LOCAL_IMG_HASH}' > ${REMOTE_DIR}/.remote_image_hash"
+  echo -e "${GREEN}✓ Remote Docker images updated and loaded successfully.${NC}"
+else
+  echo -e "\n${GREEN}⚡ [5/6] Image transfer skipped (already up-to-date on remote).${NC}"
+fi
 
 # 6. Start Containers & Healthcheck
 echo -e "\n${YELLOW}⚡ [6/6] Launching containers and verifying health status...${NC}"
-ssh -o BatchMode=yes "$REMOTE_HOST" "chmod -R 777 ${REMOTE_DIR}/backend/data && cd ${REMOTE_DIR} && docker compose up -d"
+ssh -o BatchMode=yes "$REMOTE_HOST" "chmod -R 777 ${REMOTE_DIR}/backend/data && echo '${LOCAL_IMG_HASH}' > ${REMOTE_DIR}/.remote_image_hash && cd ${REMOTE_DIR} && docker compose up -d"
 
 sleep 3
 echo ""
