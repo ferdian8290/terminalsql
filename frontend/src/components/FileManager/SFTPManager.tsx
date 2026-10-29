@@ -841,108 +841,128 @@ export function SFTPManager({ tab }: Props) {
 
       {/* Local File Right-Click Context Menu */}
       {localContextMenu && (
-        <div
-          style={{ top: `${localContextMenu.y}px`, left: `${localContextMenu.x}px` }}
-          className="fixed z-50 min-w-[180px] rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="px-2 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider truncate">
-            {localContextMenu.item.name}
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-transparent"
+            onClick={() => setLocalContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setLocalContextMenu(null);
+            }}
+          />
+          <div
+            style={{ top: `${localContextMenu.y}px`, left: `${localContextMenu.x}px` }}
+            className="fixed z-50 min-w-[180px] rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-2 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider truncate">
+              {localContextMenu.item.name}
+            </div>
+            <button
+              onClick={() => {
+                const item = localContextMenu.item;
+                setLocalContextMenu(null);
+                handleUploadLocalFile(item);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Upload to Server
+            </button>
+            <div className="h-px bg-zinc-800/80 my-1" />
+            <button
+              onClick={() => {
+                const target = localContextMenu.item.name;
+                setLocalContextMenu(null);
+                setLocalFiles((prev) => prev.filter((f) => f.name !== target));
+                if (selectedLocal === target) setSelectedLocal(null);
+                toast.success(`Removed ${target} from local list`);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-400 hover:bg-zinc-800/80 hover:text-white transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Remove from list
+            </button>
           </div>
-          <button
-            onClick={() => {
-              const item = localContextMenu.item;
-              setLocalContextMenu(null);
-              handleUploadLocalFile(item);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Upload to Server
-          </button>
-          <div className="h-px bg-zinc-800/80 my-1" />
-          <button
-            onClick={() => {
-              const target = localContextMenu.item.name;
-              setLocalContextMenu(null);
-              setLocalFiles((prev) => prev.filter((f) => f.name !== target));
-              if (selectedLocal === target) setSelectedLocal(null);
-              toast.success(`Removed ${target} from local list`);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-400 hover:bg-zinc-800/80 hover:text-white transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Remove from list
-          </button>
-        </div>
+        </>
       )}
 
       {/* Remote File Right-Click Context Menu */}
       {remoteContextMenu && (
-        <div
-          style={{ top: `${remoteContextMenu.y}px`, left: `${remoteContextMenu.x}px` }}
-          className="fixed z-50 min-w-[190px] rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="px-2 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider truncate">
-            {remoteContextMenu.item.name}
-          </div>
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-transparent"
+            onClick={() => setRemoteContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setRemoteContextMenu(null);
+            }}
+          />
+          <div
+            style={{ top: `${remoteContextMenu.y}px`, left: `${remoteContextMenu.x}px` }}
+            className="fixed z-50 min-w-[190px] rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-2 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider truncate">
+              {remoteContextMenu.item.name}
+            </div>
 
-          {remoteContextMenu.item.type === 'file' && (
+            {remoteContextMenu.item.type === 'file' && (
+              <button
+                onClick={() => {
+                  const name = remoteContextMenu.item.name;
+                  setRemoteContextMenu(null);
+                  handleDownloadFile(name);
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download to PC
+              </button>
+            )}
+
             <button
               onClick={() => {
                 const name = remoteContextMenu.item.name;
                 setRemoteContextMenu(null);
-                handleDownloadFile(name);
+                setRenamingRemote(name);
+                setNewRemoteName(name);
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors"
             >
-              <Download className="w-3.5 h-3.5" />
-              Download to PC
+              <Edit2 className="w-3.5 h-3.5" />
+              Rename
             </button>
-          )}
 
-          <button
-            onClick={() => {
-              const name = remoteContextMenu.item.name;
-              setRemoteContextMenu(null);
-              setRenamingRemote(name);
-              setNewRemoteName(name);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-            Rename
-          </button>
+            <button
+              onClick={() => {
+                const name = remoteContextMenu.item.name;
+                setRemoteContextMenu(null);
+                const fullPath = `${remotePath === '/' ? '' : remotePath}/${name}`;
+                navigator.clipboard.writeText(fullPath);
+                toast.success('Path copied to clipboard');
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Copy Remote Path
+            </button>
 
-          <button
-            onClick={() => {
-              const name = remoteContextMenu.item.name;
-              setRemoteContextMenu(null);
-              const fullPath = `${remotePath === '/' ? '' : remotePath}/${name}`;
-              navigator.clipboard.writeText(fullPath);
-              toast.success('Path copied to clipboard');
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors"
-          >
-            <Copy className="w-3.5 h-3.5" />
-            Copy Remote Path
-          </button>
+            <div className="h-px bg-zinc-800/80 my-1" />
 
-          <div className="h-px bg-zinc-800/80 my-1" />
-
-          <button
-            onClick={() => {
-              const name = remoteContextMenu.item.name;
-              setRemoteContextMenu(null);
-              handleDeleteRemote(name);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete from Server
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                const name = remoteContextMenu.item.name;
+                setRemoteContextMenu(null);
+                handleDeleteRemote(name);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete from Server
+            </button>
+          </div>
+        </>
       )}
 
       {/* FileZilla Bottom Transfer Queue / Status Strip */}

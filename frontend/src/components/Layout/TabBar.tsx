@@ -278,11 +278,20 @@ export function TabBar() {
 
       {/* Native Desktop Context Menu for Tabs */}
       {contextMenu && (
-        <div
-          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="fixed z-50 min-w-[210px] rounded-lg border border-border bg-popover/95 backdrop-blur-md p-1 shadow-2xl text-xs font-sans text-popover-foreground animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-transparent"
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu(null);
+            }}
+          />
+          <div
+            style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+            className="fixed z-50 min-w-[210px] rounded-lg border border-border bg-popover/95 backdrop-blur-md p-1 shadow-2xl text-xs font-sans text-popover-foreground animate-in fade-in zoom-in-95 duration-100"
+            onClick={(e) => e.stopPropagation()}
+          >
           <div className="px-2 py-1 text-[10px] font-mono text-muted-foreground uppercase tracking-wider select-none truncate">
             {contextMenu.tab.label}
           </div>
@@ -383,7 +392,8 @@ export function TabBar() {
             </span>
           </button>
         </div>
-      )}
+      </>
+    )}
     </div>
   );
 }

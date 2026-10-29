@@ -119,14 +119,38 @@ export function SSHTerminal({ tab }: Props) {
       if (text && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
       }
+      xtermRef.current?.focus();
     } catch {
-      toast.error('Clipboard read failed');
+      toast.error('Failed to read clipboard');
+      xtermRef.current?.focus();
     }
+  }, []);
+
+  const handleCopySelection = useCallback(() => {
+    setContextMenu(null);
+    const sel = xtermRef.current?.getSelection();
+    if (sel && sel.length > 0) {
+      navigator.clipboard.writeText(sel).then(() => {
+        toast.success('Copied to clipboard');
+      }).catch(() => {
+        toast.error('Failed to copy to clipboard');
+      });
+    }
+    // Deselect and re-focus terminal cleanly so text highlight doesn't stay stuck
+    xtermRef.current?.clearSelection();
+    xtermRef.current?.focus();
   }, []);
 
   const handleSelectAll = useCallback(() => {
     setContextMenu(null);
     xtermRef.current?.selectAll();
+    xtermRef.current?.focus();
+  }, []);
+
+  const handleClear = useCallback(() => {
+    setContextMenu(null);
+    xtermRef.current?.clear();
+    xtermRef.current?.focus();
   }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -140,8 +164,8 @@ export function SSHTerminal({ tab }: Props) {
 
     const menuWidth = 280;
     const menuHeight = 310;
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth);
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight);
+    const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth));
+    const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight));
     setContextMenu({ x, y });
   }, [handlePaste]);
 
@@ -316,6 +340,8 @@ export function SSHTerminal({ tab }: Props) {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setContextMenu(null);
+        xtermRef.current?.clearSelection();
+        xtermRef.current?.focus();
       }
       if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
         e.preventDefault();
@@ -361,7 +387,7 @@ export function SSHTerminal({ tab }: Props) {
         } catch { }
       }
     };
-  }, [tab.id, connect, handlePaste]);
+  }, [tab.id, connect, handlePaste, handleCopySelection]);
 
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
@@ -426,18 +452,6 @@ export function SSHTerminal({ tab }: Props) {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'input', data }));
       xtermRef.current?.focus();
-    }
-  }
-
-  function handleClear() {
-    xtermRef.current?.clear();
-  }
-
-  function handleCopySelection() {
-    const sel = xtermRef.current?.getSelection();
-    if (sel) {
-      navigator.clipboard.writeText(sel);
-      toast.success('Copied to clipboard');
     }
   }
 
@@ -654,121 +668,134 @@ export function SSHTerminal({ tab }: Props) {
 
       {/* Native Desktop Context Menu */}
       {contextMenu && (
-        <div
-          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="fixed z-50 min-w-[280px] w-auto rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1.5 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider select-none font-semibold">
-            Terminal Actions
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-transparent"
+            onClick={() => {
+              setContextMenu(null);
+              xtermRef.current?.focus();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu(null);
+            }}
+          />
+          <div
+            style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+            className="fixed z-50 min-w-[280px] w-auto rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1.5 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider select-none font-semibold">
+              Terminal Actions
+            </div>
+
+            <button
+              onClick={handlePaste}
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <ClipboardPaste className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Paste from Clipboard</span>
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+Shift+V</span>
+            </button>
+
+            <button
+              onClick={handleCopySelection}
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <Copy className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>Copy Selection</span>
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+Shift+C</span>
+            </button>
+
+            <button
+              onClick={handleSelectAll}
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <CheckSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>Select All</span>
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+A</span>
+            </button>
+
+            <button
+              onClick={handleClear}
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <Eraser className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Clear Screen</span>
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+L</span>
+            </button>
+
+            <div className="h-px bg-zinc-800/80 my-1" />
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                handleDownloadLog();
+              }}
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <Download className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>Download Session Log</span>
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 shrink-0">.log</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                setShowSettings(true);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <Settings2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              Appearance & Font Settings
+            </button>
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                handleOpenSFTP();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              Open SFTP Manager
+            </button>
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                connect(true);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              Restart Session
+            </button>
+
+            <div className="h-px bg-zinc-800/80 my-1" />
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                handleDisconnect();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors select-none"
+            >
+              <Power className="w-3.5 h-3.5 shrink-0" />
+              Close Session
+            </button>
           </div>
-
-          <button
-            onClick={handlePaste}
-            className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <span className="flex items-center gap-2 whitespace-nowrap">
-              <ClipboardPaste className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Paste from Clipboard</span>
-            </span>
-            <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+Shift+V</span>
-          </button>
-
-          <button
-            onClick={handleCopySelection}
-            className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <span className="flex items-center gap-2 whitespace-nowrap">
-              <Copy className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-              <span>Copy Selection</span>
-            </span>
-            <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+Shift+C</span>
-          </button>
-
-          <button
-            onClick={handleSelectAll}
-            className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <span className="flex items-center gap-2 whitespace-nowrap">
-              <CheckSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span>Select All</span>
-            </span>
-            <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+A</span>
-          </button>
-
-          <button
-            onClick={handleClear}
-            className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <span className="flex items-center gap-2 whitespace-nowrap">
-              <Eraser className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Clear Screen</span>
-            </span>
-            <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+L</span>
-          </button>
-
-          <div className="h-px bg-zinc-800/80 my-1" />
-
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              handleDownloadLog();
-            }}
-            className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <span className="flex items-center gap-2 whitespace-nowrap">
-              <Download className="w-3.5 h-3.5 text-sky-400" />
-              <span>Download Session Log</span>
-            </span>
-            <span className="text-[10px] font-mono text-zinc-500">.log</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              setShowSettings(true);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <Settings2 className="w-3.5 h-3.5 text-zinc-400" />
-            Appearance & Font Settings
-          </button>
-
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              handleOpenSFTP();
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-            Open SFTP Manager
-          </button>
-
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              connect(true);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
-            Restart Session
-          </button>
-
-          <div className="h-px bg-zinc-800/80 my-1" />
-
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              handleDisconnect();
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors select-none"
-          >
-            <Power className="w-3.5 h-3.5" />
-            Close Session
-          </button>
-        </div>
+        </>
       )}
 
       {/* Advanced Terminal Settings Modal */}
