@@ -65,7 +65,10 @@ function fallbackCopyText(text: string): boolean {
 interface TerminalSession {
   term: XTerm;
   fit: FitAddon;
-  ws: WebSocket;
+  ws?: WebSocket | null;
+  es?: EventSource | null;
+  httpToken?: string | null;
+  transport: 'ws' | 'http';
   container: HTMLDivElement;
   isConnected: boolean;
   termSize: { cols: number; rows: number };
@@ -73,11 +76,43 @@ interface TerminalSession {
 
 const sessionRegistry = new Map<string, TerminalSession>();
 
+function sendTerminalInput(session: TerminalSession, data: string) {
+  if (session.transport === 'ws' && session.ws?.readyState === WebSocket.OPEN) {
+    session.ws.send(JSON.stringify({ type: 'input', data }));
+  } else if (session.httpToken) {
+    fetch(`/api/ssh/http/input/${encodeURIComponent(session.httpToken)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'input', data }),
+    }).catch(() => {});
+  }
+}
+
+function sendTerminalResize(session: TerminalSession, cols: number, rows: number) {
+  if (session.transport === 'ws' && session.ws?.readyState === WebSocket.OPEN) {
+    session.ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+  } else if (session.httpToken) {
+    fetch(`/api/ssh/http/input/${encodeURIComponent(session.httpToken)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'resize', cols, rows }),
+    }).catch(() => {});
+  }
+}
+
 export function disposeTerminalSession(tabId: string) {
   const session = sessionRegistry.get(tabId);
   if (session) {
     try {
-      session.ws.close();
+      if (session.ws) session.ws.close();
+      if (session.es) session.es.close();
+      if (session.httpToken) {
+        fetch(`/api/ssh/http/input/${encodeURIComponent(session.httpToken)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'disconnect' }),
+        }).catch(() => {});
+      }
       session.term.dispose();
       if (session.container.parentNode) {
         session.container.parentNode.removeChild(session.container);
@@ -99,6 +134,7 @@ export function SSHTerminal({ tab }: Props) {
   const [termSize, setTermSize] = useState({ cols: 80, rows: 24 });
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [transport, setTransport] = useState<'ws' | 'http'>('ws');
   const [settings, setSettings] = useState<TerminalSettings>(getStoredSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -136,13 +172,14 @@ export function SSHTerminal({ tab }: Props) {
         if (fitRef.current) {
           fitRef.current.fit();
           setTermSize({ cols: term.cols, rows: term.rows });
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+          const sess = sessionRegistry.get(tab.id);
+          if (sess) {
+            sendTerminalResize(sess, term.cols, term.rows);
           }
         }
       }, 50);
     }
-  }, [appTheme]);
+  }, [appTheme, tab.id]);
 
   const handleZoom = (delta: number) => {
     const nextSize = Math.max(10, Math.min(28, settings.fontSize + delta));
@@ -157,8 +194,9 @@ export function SSHTerminal({ tab }: Props) {
     try {
       if (navigator.clipboard?.readText) {
         const text = await navigator.clipboard.readText();
-        if (text && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+        if (text) {
+          const sess = sessionRegistry.get(tab.id);
+          if (sess) sendTerminalInput(sess, text);
         }
       } else {
         toast('Press Ctrl+Shift+V to paste on HTTP connections', { icon: '📋' });
@@ -168,7 +206,7 @@ export function SSHTerminal({ tab }: Props) {
       toast('Press Ctrl+Shift+V to paste on HTTP connections', { icon: '📋' });
       xtermRef.current?.focus();
     }
-  }, []);
+  }, [tab.id]);
 
   const handleCopySelection = useCallback(() => {
     setContextMenu(null);
@@ -227,7 +265,10 @@ export function SSHTerminal({ tab }: Props) {
 
   const connect = useCallback((forceNew = false) => {
     let session = sessionRegistry.get(tab.id);
-    const isClosed = session?.ws && (session.ws.readyState === WebSocket.CLOSED || session.ws.readyState === WebSocket.CLOSING);
+    const isClosed = !session?.isConnected && (
+      (session?.transport === 'ws' && session?.ws && (session.ws.readyState === WebSocket.CLOSED || session.ws.readyState === WebSocket.CLOSING)) ||
+      (session?.transport === 'http' && !session?.httpToken)
+    );
 
     if (!session || forceNew || isClosed) {
       setIsConnecting(true);
@@ -235,7 +276,8 @@ export function SSHTerminal({ tab }: Props) {
 
       if (session) {
         try {
-          if (session.ws.readyState === WebSocket.OPEN) session.ws.close();
+          if (session.ws) session.ws.close();
+          if (session.es) session.es.close();
           session.term.dispose();
           // Safe DOM detach — avoid removeChild crash when node ownership has shifted
           if (session.container.parentNode) {
@@ -271,31 +313,94 @@ export function SSHTerminal({ tab }: Props) {
       term.loadAddon(search);
       term.open(container);
 
-      // WebSocket connection with persistent tabId and token query fallback for corporate proxies
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const token = localStorage.getItem('terminalsql_token');
-      const wsUrl = `${proto}//${window.location.host}/api/ssh/connect/${tab.connectionId}?tabId=${encodeURIComponent(tab.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
-      const ws = new WebSocket(wsUrl);
-
       session = {
         term,
         fit,
-        ws,
+        ws: null,
+        es: null,
+        httpToken: null,
+        transport: 'ws',
         container,
         isConnected: false,
         termSize: { cols: 80, rows: 24 },
       };
       sessionRegistry.set(tab.id, session);
 
+      // Function to start HTTP Streaming Tunnel (bypasses corporate proxies blocking WebSocket)
+      const startHttpTunnel = async () => {
+        if (!sessionRegistry.has(tab.id)) return;
+        setTransport('http');
+        if (session) session.transport = 'http';
+        term.writeln('\r\n\x1b[36m● Corporate proxy detected. Switching to HTTP Streaming Tunnel...\x1b[0m');
+        try {
+          const res = await fetch(`/api/ssh/http/connect/${tab.connectionId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tabId: tab.id }),
+          });
+          const data = await res.json();
+          if (!data.ok || !data.sessionToken) {
+            throw new Error(data.error || 'Failed to establish HTTP tunnel');
+          }
+
+          const httpToken = data.sessionToken;
+          session!.httpToken = httpToken;
+
+          const es = new EventSource(`/api/ssh/http/stream/${encodeURIComponent(httpToken)}`);
+          session!.es = es;
+
+          es.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data);
+              if (msg.type === 'data') {
+                term.write(msg.data);
+              } else if (msg.type === 'connected') {
+                session!.isConnected = true;
+                setIsConnecting(false);
+                setIsConnected(true);
+                term.writeln(`\r\n\x1b[32m✔ ${msg.message}\x1b[0m\r\n`);
+                sendTerminalResize(session!, term.cols, term.rows);
+              } else if (msg.type === 'status') {
+                term.writeln(`\r\n\x1b[33m● ${msg.message}\x1b[0m\r\n`);
+              } else if (msg.type === 'error') {
+                term.writeln(`\r\n\x1b[31m✗ ${msg.message}\x1b[0m\r\n`);
+              }
+            } catch {
+              term.write(event.data);
+            }
+          };
+
+          es.onerror = () => {
+            // EventSource handles retries automatically
+          };
+
+          sendTerminalResize(session!, term.cols, term.rows);
+        } catch (err: any) {
+          setIsConnecting(false);
+          setIsConnected(false);
+          term.writeln(`\r\n\x1b[31m✗ HTTP Tunnel Error: ${err.message}\x1b[0m\r\n`);
+        }
+      };
+
+      // WebSocket connection with automatic fallback to HTTP Tunnel
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const token = localStorage.getItem('terminalsql_token');
+      const wsUrl = `${proto}//${window.location.host}/api/ssh/connect/${tab.connectionId}?tabId=${encodeURIComponent(tab.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+      
+      let wsHandshakeSuccess = false;
+      const ws = new WebSocket(wsUrl);
+      session.ws = ws;
+
       ws.onopen = () => {
         if (!sessionRegistry.has(tab.id)) return;
+        wsHandshakeSuccess = true;
         session!.isConnected = true;
+        session!.transport = 'ws';
+        setTransport('ws');
         setIsConnecting(false);
         setIsConnected(true);
         term.writeln('\r\n\x1b[32m● SSH: Connected. Authenticating...\x1b[0m\r\n');
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        }
+        sendTerminalResize(session!, term.cols, term.rows);
       };
 
       ws.onmessage = (event) => {
@@ -320,37 +425,39 @@ export function SSHTerminal({ tab }: Props) {
 
       ws.onclose = (event) => {
         if (!sessionRegistry.has(tab.id)) return;
+        if (!wsHandshakeSuccess && (event.code === 1006 || event.code === 1005)) {
+          // Handshake blocked by corporate proxy -> auto fallback to HTTP streaming!
+          try { ws.close(); } catch {}
+          startHttpTunnel();
+          return;
+        }
+
         session!.isConnected = false;
         setIsConnecting(false);
         setIsConnected(false);
-        if (event.code === 1006) {
-          term.writeln(`\r\n\x1b[33m● Connection reset (code 1006)\x1b[0m`);
-          term.writeln(`\x1b[90mTip: Click Reconnect above to retry, or verify network proxy/firewall permits WebSocket\x1b[0m\r\n`);
-        } else {
-          term.writeln(`\r\n\x1b[33m● Session closed (${event.reason || 'code ' + event.code})\x1b[0m\r\n`);
-        }
+        term.writeln(`\r\n\x1b[33m● Session closed (${event.reason || 'code ' + event.code})\x1b[0m\r\n`);
       };
 
       ws.onerror = () => {
         if (!sessionRegistry.has(tab.id)) return;
+        if (!wsHandshakeSuccess) {
+          try { ws.close(); } catch {}
+          startHttpTunnel();
+          return;
+        }
         session!.isConnected = false;
         setIsConnecting(false);
         setIsConnected(false);
-        term.writeln('\r\n\x1b[31m✗ Connection error\x1b[0m\r\n');
       };
 
       term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data }));
-        }
+        sendTerminalInput(session!, data);
       });
 
       term.onResize(({ cols, rows }) => {
         session!.termSize = { cols, rows };
         setTermSize({ cols, rows });
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-        }
+        sendTerminalResize(session!, cols, rows);
       });
 
       term.onSelectionChange(() => {
@@ -365,9 +472,10 @@ export function SSHTerminal({ tab }: Props) {
 
     xtermRef.current = session.term;
     fitRef.current = session.fit;
-    wsRef.current = session.ws;
+    wsRef.current = session.ws || null;
     setIsConnected(session.isConnected);
     setTermSize(session.termSize);
+    setTransport(session.transport);
 
     // Mount container into termRef.current DOM node
     if (termRef.current) {
@@ -383,13 +491,11 @@ export function SSHTerminal({ tab }: Props) {
           session!.fit.fit();
           session!.termSize = { cols: session!.term.cols, rows: session!.term.rows };
           setTermSize({ cols: session!.term.cols, rows: session!.term.rows });
-          if (session!.ws.readyState === WebSocket.OPEN) {
-            session!.ws.send(JSON.stringify({ type: 'resize', cols: session!.term.cols, rows: session!.term.rows }));
-          }
+          sendTerminalResize(session!, session!.term.cols, session!.term.rows);
         } catch { }
       }, 50);
     }
-  }, [tab.id, tab.connectionId]);
+  }, [tab.id, tab.connectionId, appTheme]);
 
   useEffect(() => {
     connect(false);
@@ -468,12 +574,21 @@ export function SSHTerminal({ tab }: Props) {
   }, []);
 
   function handleDisconnect() {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify({ type: 'disconnect' }));
-      } catch { }
+    const sess = sessionRegistry.get(tab.id);
+    if (sess) {
+      if (sess.transport === 'ws' && sess.ws?.readyState === WebSocket.OPEN) {
+        try { sess.ws.send(JSON.stringify({ type: 'disconnect' })); } catch { }
+        sess.ws.close(1000, 'User disconnected');
+      } else if (sess.httpToken) {
+        fetch(`/api/ssh/http/input/${encodeURIComponent(sess.httpToken)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'disconnect' }),
+        }).catch(() => {});
+        sess.es?.close();
+      }
+      sess.isConnected = false;
     }
-    wsRef.current?.close(1000, 'User disconnected');
     setIsConnected(false);
     xtermRef.current?.writeln('\r\n\x1b[33m⚠ Disconnected by user\x1b[0m\r\n');
   }
@@ -522,8 +637,9 @@ export function SSHTerminal({ tab }: Props) {
   }
 
   function sendSpecialKey(data: string) {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', data }));
+    const sess = sessionRegistry.get(tab.id);
+    if (sess) {
+      sendTerminalInput(sess, data);
       xtermRef.current?.focus();
     }
   }
@@ -560,7 +676,7 @@ export function SSHTerminal({ tab }: Props) {
                 ? 'bg-amber-500 animate-pulse'
                 : 'bg-zinc-400 dark:bg-zinc-600'
             }`} />
-            {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+            {isConnected ? (transport === 'http' ? 'Connected (HTTP Tunnel)' : 'Connected') : isConnecting ? 'Connecting...' : 'Disconnected'}
           </Badge>
 
           {!isConnected && !isConnecting && (
