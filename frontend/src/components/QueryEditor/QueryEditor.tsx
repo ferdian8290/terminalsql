@@ -500,12 +500,12 @@ export function QueryEditor({ tab }: Props) {
     toast.success(`Active Database: ${newDb}`);
 
     const dbType =
-      (tab.connection as any).dbType?.toLowerCase() ||
-      (tab.connection.port === 8123 || tab.connection.port === 9443 || tab.connection.port === 21426
+      (tab.connection as any)?.dbType?.toLowerCase() ||
+      (tab.connection?.port === 8123 || tab.connection?.port === 9443 || tab.connection?.port === 21426
         ? 'clickhouse'
-        : tab.connection.port === 3306
+        : tab.connection?.port === 3306
         ? 'mysql'
-        : tab.connection.port === 5432 || tab.connection.port === 6432 || tab.connection.port === 8000
+        : tab.connection?.port === 5432 || tab.connection?.port === 6432 || tab.connection?.port === 8000
         ? 'postgres'
         : '');
 
@@ -874,7 +874,7 @@ export function QueryEditor({ tab }: Props) {
     const hasUserLimit = /\bLIMIT\s+\d+/i.test(q);
     const currentRows = resultFilter.trim() ? displayedRows : result?.rows || [];
     const CHUNK_SIZE = 10000;
-    const baseName = `${tab.connection.name}_${activeDb || 'export'}_${Date.now()}`.replace(/\s+/g, '_');
+    const baseName = `${tab.connection?.name || 'export'}_${activeDb || 'export'}_${Date.now()}`.replace(/\s+/g, '_');
 
     // If result has explicit query LIMIT, or is already completely loaded:
     if (hasUserLimit || (result && !result.truncated && currentRows.length > 0 && currentRows.length < CHUNK_SIZE)) {
@@ -1006,13 +1006,13 @@ export function QueryEditor({ tab }: Props) {
                 <span className="text-muted-foreground font-medium text-[11px]">Cluster:</span>
                 <div
                   className="h-7 px-2.5 rounded border border-border bg-card text-foreground flex items-center gap-1.5 font-mono shadow-sm select-none"
-                  title={`Target Cluster: ${tab.connection.name} (${tab.connection.host}:${tab.connection.port})`}
+                  title={`Target Cluster: ${tab.connection?.name || ''} (${tab.connection?.host || ''}:${tab.connection?.port || ''})`}
                 >
                   <span className="shrink-0">
-                    {getDatabaseBrandIcon(tab.connection, (tab.connection as any).dbType, 'w-3.5 h-3.5')}
+                    {tab.connection && getDatabaseBrandIcon(tab.connection, (tab.connection as any)?.dbType, 'w-3.5 h-3.5')}
                   </span>
                   <span className="font-semibold text-foreground text-[11px] truncate max-w-[150px]">
-                    {tab.connection.name}
+                    {tab.connection?.name || 'Database'}
                   </span>
                 </div>
               </div>
@@ -1353,7 +1353,7 @@ export function QueryEditor({ tab }: Props) {
                     </span>
                   </div>
                   <p className="text-[10.5px] text-muted-foreground font-mono">
-                    {tab.connection.name} {activeDb ? `· ${activeDb}` : ''}
+                    {tab.connection?.name || ''} {activeDb ? `· ${activeDb}` : ''}
                   </p>
                 </div>
 

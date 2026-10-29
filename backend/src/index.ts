@@ -35,10 +35,6 @@ async function bootstrap() {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-XSS-Protection', '1; mode=block');
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-    reply.header(
-      'Content-Security-Policy',
-      "default-src 'self'; connect-src 'self' ws: wss: http: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:;"
-    );
   });
 
   await app.register(fastifyCors, {
@@ -117,7 +113,7 @@ async function bootstrap() {
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',
-    version: '1.3.5',
+    version: '1.3.6',
     timestamp: new Date().toISOString(),
   }));
 

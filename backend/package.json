@@ -1,6 +1,6 @@
 {
   "name": "terminalsql-backend",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "TerminalSQL Backend - SSH, DB Query, SFTP Manager",
   "main": "dist/index.js",
   "scripts": {

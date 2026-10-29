@@ -93,7 +93,7 @@ export function SFTPManager({ tab }: Props) {
 
   // Logs & Transfers states
   const [logs, setLogs] = useState<string[]>([
-    `Status: Connecting to sftp://${tab.connection.username}@${tab.connection.host}:${tab.connection.port}...`,
+    `Status: Connecting to sftp://${tab.connection?.username || 'user'}@${tab.connection?.host || 'remote'}:${tab.connection?.port || 22}...`,
     'Status: Connected. Resolving home directory...'
   ]);
   const [showLog, setShowLog] = useState(true);
@@ -385,11 +385,11 @@ export function SFTPManager({ tab }: Props) {
   function handleOpenTerminal() {
     openTab({
       type: 'ssh',
-      label: tab.connection.name,
+      label: tab.connection?.name || 'SSH',
       connectionId: tab.connectionId,
       connection: tab.connection,
     });
-    toast.success(`Opening SSH Terminal for ${tab.connection.name}`);
+    toast.success(`Opening SSH Terminal for ${tab.connection?.name || 'Session'}`);
   }
 
   return (
@@ -421,7 +421,7 @@ export function SFTPManager({ tab }: Props) {
             SFTP
           </Badge>
           <span className="text-zinc-300 font-medium">
-            sftp://{tab.connection.host}:{tab.connection.port}
+            sftp://{tab.connection?.host || 'localhost'}:{tab.connection?.port || 22}
           </span>
         </div>
 

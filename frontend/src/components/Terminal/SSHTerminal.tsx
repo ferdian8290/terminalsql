@@ -403,7 +403,7 @@ export function SSHTerminal({ tab }: Props) {
     const header = [
       '================================================================================',
       ` TerminalSQL SSH Session Log`,
-      ` Host: ${tab.connection.username}@${tab.connection.host}:${tab.connection.port} (${tab.connection.name})`,
+      ` Host: ${tab.connection?.username || 'user'}@${tab.connection?.host || 'localhost'}:${tab.connection?.port || 22} (${tab.connection?.name || ''})`,
       ` Exported: ${new Date().toISOString()}`,
       '================================================================================\r\n',
     ].join('\r\n');
@@ -413,7 +413,7 @@ export function SSHTerminal({ tab }: Props) {
     const a = document.createElement('a');
     a.href = url;
     const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    a.download = `ssh-log_${tab.connection.host}_${dateStr}.log`;
+    a.download = `ssh-log_${tab.connection?.host || 'remote'}_${dateStr}.log`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -443,11 +443,11 @@ export function SSHTerminal({ tab }: Props) {
   function handleOpenSFTP() {
     openTab({
       type: 'sftp',
-      label: `SFTP: ${tab.connection.name}`,
+      label: `SFTP: ${tab.connection?.name || 'SFTP'}`,
       connectionId: tab.connectionId,
       connection: tab.connection,
     });
-    toast.success(`Opening SFTP for ${tab.connection.name}`);
+    toast.success(`Opening SFTP for ${tab.connection?.name || 'Session'}`);
   }
 
   return (
@@ -480,7 +480,7 @@ export function SSHTerminal({ tab }: Props) {
           )}
 
           <span className="text-xs text-zinc-300 font-medium truncate max-w-[200px]">
-            {tab.connection.username}@{tab.connection.host}:{tab.connection.port}
+            {tab.connection?.username || 'user'}@{tab.connection?.host || 'localhost'}:{tab.connection?.port || 22}
           </span>
 
           <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline-block">

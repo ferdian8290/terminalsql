@@ -18,6 +18,33 @@
           document.documentElement.classList.add('light');
         }
       } catch (e) {}
+
+      window.addEventListener('error', function(e) {
+        var root = document.getElementById('root');
+        if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+          var box = document.getElementById('tsql-err-box');
+          if (!box) {
+            box = document.createElement('div');
+            box.id = 'tsql-err-box';
+            box.style.cssText = 'position:fixed;top:24px;left:24px;right:24px;padding:20px;background:#18181b;border:1px solid #ef4444;color:#fca5a5;font-family:monospace;font-size:12px;border-radius:8px;z-index:99999;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);white-space:pre-wrap;';
+            var title = document.createElement('div');
+            title.style.cssText = 'font-weight:bold;margin-bottom:8px;color:#f87171;font-size:14px;';
+            title.textContent = 'TerminalSQL Startup Error';
+            var btn = document.createElement('button');
+            btn.textContent = 'Clear Cache & Reload';
+            btn.style.cssText = 'margin-top:12px;padding:6px 12px;background:#27272a;color:#e4e4e7;border:1px solid #52525b;border-radius:4px;cursor:pointer;';
+            btn.onclick = function() { localStorage.clear(); window.location.reload(); };
+            box.appendChild(title);
+            var content = document.createElement('div');
+            content.id = 'tsql-err-content';
+            box.appendChild(content);
+            box.appendChild(btn);
+            document.body.appendChild(box);
+          }
+          var c = document.getElementById('tsql-err-content');
+          if (c) c.textContent = (e.message || e) + (e.filename ? '\nAt: ' + e.filename + ':' + e.lineno : '');
+        }
+      });
     </script>
   </head>
   <body>

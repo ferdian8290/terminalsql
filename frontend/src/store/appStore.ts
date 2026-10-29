@@ -119,7 +119,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const saved = localStorage.getItem('terminalsql_saved_tabs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((t: any) => t && t.id && t.type && t.connection);
+        }
       }
     } catch {}
     return [];
