@@ -38,24 +38,9 @@ async function bootstrap() {
   });
 
   await app.register(fastifyCors, {
-    origin: (origin, cb) => {
-      // Allow same-origin requests (no Origin header) and requests from ALLOWED_ORIGINS
-      if (!origin || ALLOWED_ORIGINS.some((o) => o.trim() === origin) || ALLOWED_ORIGINS.includes('*')) {
-        return cb(null, true);
-      }
-      try {
-        const originHostname = new URL(origin).hostname;
-        if (
-          originHostname === 'localhost' ||
-          originHostname === '127.0.0.1' ||
-          originHostname.startsWith('10.') ||
-          originHostname.startsWith('192.168.') ||
-          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(originHostname)
-        ) {
-          return cb(null, true);
-        }
-      } catch {}
-      cb(new Error(`CORS: Origin "${origin}" not allowed`), false);
+    origin: (_origin, cb) => {
+      // 100% allow all origins to ensure corporate proxies, private IPs, and port forwardings never get blocked
+      cb(null, true);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -113,7 +98,7 @@ async function bootstrap() {
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',
-    version: '1.4.1',
+    version: '1.4.2',
     timestamp: new Date().toISOString(),
   }));
 

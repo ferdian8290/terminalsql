@@ -323,7 +323,12 @@ export function SSHTerminal({ tab }: Props) {
         session!.isConnected = false;
         setIsConnecting(false);
         setIsConnected(false);
-        term.writeln(`\r\n\x1b[33m● Session closed (${event.reason || 'code ' + event.code})\x1b[0m\r\n`);
+        if (event.code === 1006) {
+          term.writeln(`\r\n\x1b[33m● Connection reset (code 1006)\x1b[0m`);
+          term.writeln(`\x1b[90mTip: Click Reconnect above to retry, or verify network proxy/firewall permits WebSocket\x1b[0m\r\n`);
+        } else {
+          term.writeln(`\r\n\x1b[33m● Session closed (${event.reason || 'code ' + event.code})\x1b[0m\r\n`);
+        }
       };
 
       ws.onerror = () => {
