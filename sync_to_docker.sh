@@ -84,7 +84,8 @@ trap 'rm -f "$TAR_FILE"' EXIT
 # 2. Build Images Locally
 echo -e "\n${YELLOW}🔨 [2/6] Building production Docker images locally...${NC}"
 cd "$LOCAL_DIR"
-docker compose build --quiet
+docker build --network host -t terminalsql-backend:latest ./backend
+docker build --network host -t terminalsql-frontend:latest ./frontend
 echo -e "${GREEN}✓ Local Docker images built successfully.${NC}"
 
 # 3. Export Images to Archive

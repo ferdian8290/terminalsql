@@ -3,7 +3,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      network: host
     ports:
       - "${BACKEND_PORT:-3002}:3002"
     environment:
@@ -38,7 +37,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      network: host
     ports:
       - "${FRONTEND_PORT:-5175}:80"
     environment:
