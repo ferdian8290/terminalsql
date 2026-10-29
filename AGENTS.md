@@ -37,3 +37,16 @@ When designing and developing interfaces, components, and interactions for this 
    - `Ctrl+Enter` (and `Cmd+Enter`) must always trigger query execution with priority given to highlighted/selected SQL text, falling back to the entire document.
    - Execution commands must be registered directly in Monaco via `editor.addCommand` and `editor.addAction`, complemented by capture-phase window keydown listeners.
 
+7. **Mandatory Version Bumping & Automatic Git Push on Every Change**:
+   - **Continuous Versioning**: Every time changes, enhancements, or bug fixes are made to the codebase, the agent MUST bump the semantic version (e.g. patch `x.y.Z` or minor `x.Y.0`) across all version locations:
+     - Root `package.json`
+     - `backend/package.json`
+     - `frontend/package.json`
+     - `backend/src/index.ts`
+     - `frontend/src/version.ts`
+     - `README.md` version badge
+   - **Documentation Maintenance**: Always update `README.md` and/or `DOCKER_GUIDE.md` to document new features, scripts, or parameter changes.
+   - **Build Verification**: Run `npm run build` locally to verify 0 errors before committing.
+   - **Immediate Git Commit & Push**: Immediately stage all changes (`git add .`), create a structured conventional commit message, and push directly to GitHub (`git push origin main`). Never leave uncommitted changes or outdated remotes after completing a task.
+
+
