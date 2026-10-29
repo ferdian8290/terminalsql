@@ -147,10 +147,12 @@ export function SSHTerminal({ tab }: Props) {
 
   const connect = useCallback((forceNew = false) => {
     let session = sessionRegistry.get(tab.id);
-    if (!session || forceNew) {
+    const isClosed = session?.ws && (session.ws.readyState === WebSocket.CLOSED || session.ws.readyState === WebSocket.CLOSING);
+
+    if (!session || forceNew || isClosed) {
       if (session) {
         try {
-          session.ws.close();
+          if (session.ws.readyState === WebSocket.OPEN) session.ws.close();
           session.term.dispose();
           if (session.container.parentNode) session.container.parentNode.removeChild(session.container);
         } catch { }
