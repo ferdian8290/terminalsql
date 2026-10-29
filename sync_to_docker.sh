@@ -122,8 +122,15 @@ services:
       - JWT_SECRET=\${JWT_SECRET:-terminalsql_jwt_secret_key_production_32chars}
       - ENCRYPTION_KEY=\${ENCRYPTION_KEY:-terminalsql_master_aes256_encryption_key_32c}
       - DB_PATH=/app/data/terminalsql.db
-      - ALLOWED_ORIGINS=\${FRONTEND_URL:-http://localhost:5175},http://localhost:3002,http://127.0.0.1:5175
+      - ALLOWED_ORIGINS=*
       - FRONTEND_URL=\${FRONTEND_URL:-http://localhost:5175}
+      # Corporate & Offline Environment: Bypass proxy for local/LAN traffic
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,*.local
+      - no_proxy=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,*.local
     volumes:
       - ./backend/data:/app/data
     restart: unless-stopped
@@ -140,6 +147,13 @@ services:
     image: terminalsql-frontend:latest
     ports:
       - \"\${FRONTEND_PORT:-5175}:80\"
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,*.local
+      - no_proxy=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,*.local
     depends_on:
       backend:
         condition: service_healthy
