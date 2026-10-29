@@ -632,12 +632,13 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
           </div>
 
           {/* Right: Connect or Expand/Collapse Button (Always visible on hover, strictly 1-word tooltip) */}
-          <div className="flex items-center shrink-0 ml-auto pl-1">
-            <TooltipProvider delayDuration={150}>
+          <div className="flex items-center shrink-0 ml-auto pl-1 pr-0.5">
+            <TooltipProvider delayDuration={400}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
+                    title={isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isSsh) {
@@ -682,7 +683,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                     )}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right">
+                <TooltipContent side="top" align="end" sideOffset={6} className="text-[10px] py-0.5 px-1.5 font-sans pointer-events-none shadow-md z-50">
                   <p>{isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}</p>
                 </TooltipContent>
               </Tooltip>
