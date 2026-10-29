@@ -287,3 +287,26 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 - **Zero Browser Context Menus**: Klik kanan browser default diblokir sepenuhnya dan digantikan oleh custom dark context menu.
 - **Categorized Schema Tree**: Schema dikelompokkan ke dalam 4 folder standar (Tables, Foreign Tables, Views, Materialized Views).
 - **Monaco SQL Priority**: Shortcut `Ctrl+Enter` memprioritaskan teks SQL yang di-blok/highlight sebelum mengeksekusi seluruh isi query editor.
+
+---
+
+## Changelog & Version History
+
+### [v1.5.4] - 2026-10-29
+- **Sidebar Action Tooltip**: Repositioned quick-action hover tooltip (`Connect` / `Reconnect`) to `side="top" align="end"` with a smooth 400ms delay, eliminating cross-border protrusion into the terminal editor.
+- **Clean Alignment**: Added padding right spacing (`pr-0.5`) on the action button container for uniform alignment.
+
+### [v1.5.3] - 2026-10-29
+- **Live Status Dot Relocation**: Moved the active connection green dot (`titik ijo`) from overlapping the terminal icon to neatly alongside the connection name (`name ●`).
+- **Icon Integrity**: Kept terminal (`>_`), database, and SFTP brand icons 100% clean and unobstructed.
+
+### [v1.5.2] - 2026-10-29
+- **Zero Noise Terminal Output**: Removed internal switching messages (`Corporate proxy detected...`) and handshake notices from the terminal canvas, launching straight into clean shell prompts.
+- **Normal Status Badges**: Standardized the terminal toolbar status pill to show clean `● Connected`, omitting `(HTTP Tunnel)` text.
+- **SSE Stream Hijack & Buffer Defeat**: Implemented Fastify `reply.hijack()` and 2KB comment padding to immediately defeat corporate proxy buffering (Squid, BlueCoat, Fortinet).
+
+### [v1.5.1] - 2026-10-29
+- **Live Socket State Sync**: Integrated global `tabStatuses` store in Zustand. Sidebar green dots and top header badge (`N SSH`) now strictly reflect live connected sessions, clearing automatically on disconnect or session closure.
+
+### [v1.5.0] - 2026-10-29
+- **HTTP Streaming Tunnel Fallback**: Added automated dual-transport resilience. When strict enterprise corporate proxies intercept raw WebSocket traffic (`Session closed code 1006`), the client transparently switches to HTTP Streaming (`text/event-stream` + HTTP POST).
