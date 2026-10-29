@@ -34,6 +34,34 @@ function getStoredSettings(): TerminalSettings {
   return DEFAULT_TERMINAL_SETTINGS;
 }
 
+function getEffectiveTheme(preset: string, appTheme: 'dark' | 'light') {
+  if (preset === 'auto') {
+    return appTheme === 'light' ? TERMINAL_THEMES.oneLight : TERMINAL_THEMES.putty;
+  }
+  if (preset === 'putty' && appTheme === 'light') {
+    return TERMINAL_THEMES.oneLight;
+  }
+  return TERMINAL_THEMES[preset] || (appTheme === 'light' ? TERMINAL_THEMES.oneLight : TERMINAL_THEMES.putty);
+}
+
+function fallbackCopyText(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 interface TerminalSession {
   term: XTerm;
   fit: FitAddon;
@@ -63,6 +91,7 @@ interface Props { tab: Tab; }
 
 export function SSHTerminal({ tab }: Props) {
   const openTab = useAppStore((s) => s.openTab);
+  const appTheme = useAppStore((s) => s.theme);
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -75,6 +104,16 @@ export function SSHTerminal({ tab }: Props) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const settingsRef = useRef<TerminalSettings>(settings);
   settingsRef.current = settings;
+
+  const activeTheme = getEffectiveTheme(settings.themePreset, appTheme);
+
+  // Synchronize terminal theme on appTheme or settings change without reconnecting
+  useEffect(() => {
+    if (xtermRef.current) {
+      const theme = getEffectiveTheme(settings.themePreset, appTheme);
+      xtermRef.current.options.theme = theme;
+    }
+  }, [appTheme, settings.themePreset]);
 
   const applySettings = useCallback((newSettings: TerminalSettings) => {
     setSettings(newSettings);
@@ -91,7 +130,7 @@ export function SSHTerminal({ tab }: Props) {
       term.options.fontWeight = newSettings.fontWeight;
       term.options.cursorStyle = newSettings.cursorStyle;
       term.options.cursorBlink = newSettings.cursorBlink;
-      term.options.theme = TERMINAL_THEMES[newSettings.themePreset] || TERMINAL_THEMES.putty;
+      term.options.theme = getEffectiveTheme(newSettings.themePreset, appTheme);
 
       setTimeout(() => {
         if (fitRef.current) {
@@ -103,7 +142,7 @@ export function SSHTerminal({ tab }: Props) {
         }
       }, 50);
     }
-  }, []);
+  }, [appTheme]);
 
   const handleZoom = (delta: number) => {
     const nextSize = Math.max(10, Math.min(28, settings.fontSize + delta));
@@ -116,13 +155,17 @@ export function SSHTerminal({ tab }: Props) {
   const handlePaste = useCallback(async () => {
     setContextMenu(null);
     try {
-      const text = await navigator.clipboard.readText();
-      if (text && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+      if (navigator.clipboard?.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+        }
+      } else {
+        toast('Press Ctrl+Shift+V to paste on HTTP connections', { icon: '📋' });
       }
       xtermRef.current?.focus();
     } catch {
-      toast.error('Failed to read clipboard');
+      toast('Press Ctrl+Shift+V to paste on HTTP connections', { icon: '📋' });
       xtermRef.current?.focus();
     }
   }, []);
@@ -131,11 +174,23 @@ export function SSHTerminal({ tab }: Props) {
     setContextMenu(null);
     const sel = xtermRef.current?.getSelection();
     if (sel && sel.length > 0) {
-      navigator.clipboard.writeText(sel).then(() => {
-        toast.success('Copied to clipboard');
-      }).catch(() => {
-        toast.error('Failed to copy to clipboard');
-      });
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(sel).then(() => {
+          toast.success('Copied to clipboard');
+        }).catch(() => {
+          if (fallbackCopyText(sel)) {
+            toast.success('Copied to clipboard');
+          } else {
+            toast.error('Failed to copy to clipboard');
+          }
+        });
+      } else {
+        if (fallbackCopyText(sel)) {
+          toast.success('Copied to clipboard');
+        } else {
+          toast.error('Failed to copy to clipboard');
+        }
+      }
     }
     // Deselect and re-focus terminal cleanly so text highlight doesn't stay stuck
     xtermRef.current?.clearSelection();
@@ -203,7 +258,7 @@ export function SSHTerminal({ tab }: Props) {
         cursorStyle: currentSettings.cursorStyle,
         cursorWidth: 2,
         scrollback: 10000,
-        theme: TERMINAL_THEMES[currentSettings.themePreset] || TERMINAL_THEMES.putty,
+        theme: getEffectiveTheme(currentSettings.themePreset, appTheme),
         allowProposedApi: true,
       });
 
@@ -216,10 +271,9 @@ export function SSHTerminal({ tab }: Props) {
       term.loadAddon(search);
       term.open(container);
 
-      // WebSocket connection with persistent tabId (avoids query token leak if cookie exists)
+      // WebSocket connection with persistent tabId and token query fallback for corporate proxies
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const hasAuthCookie = typeof document !== 'undefined' && document.cookie.includes('auth_token=');
-      const token = !hasAuthCookie ? localStorage.getItem('terminalsql_token') : null;
+      const token = localStorage.getItem('terminalsql_token');
       const wsUrl = `${proto}//${window.location.host}/api/ssh/connect/${tab.connectionId}?tabId=${encodeURIComponent(tab.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
       const ws = new WebSocket(wsUrl);
 
@@ -480,26 +534,26 @@ export function SSHTerminal({ tab }: Props) {
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-black overflow-hidden font-mono select-none">
+    <div className="h-full w-full flex flex-col overflow-hidden font-mono select-none bg-white dark:bg-black transition-colors">
       {/* Top Info & Command Bar */}
-      <div className="min-h-8 py-0.5 px-3 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar gap-2">
+      <div className="min-h-8 py-0.5 px-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/95 dark:bg-zinc-950 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar gap-2 transition-colors">
         <div className="flex items-center gap-2 shrink-0">
           <Badge
             variant="outline"
-            className={`text-[10px] py-0 px-1.5 h-4 flex items-center gap-1 font-mono ${
+            className={`text-[10px] py-0 px-1.5 h-4 flex items-center gap-1 font-mono transition-colors ${
               isConnected
-                ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40'
+                ? 'border-emerald-500/50 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
                 : isConnecting
-                ? 'border-amber-500/40 text-amber-400 bg-amber-950/40'
-                : 'border-zinc-700 text-zinc-500 bg-zinc-900'
+                ? 'border-amber-500/50 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40'
+                : 'border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-500 bg-zinc-200/60 dark:bg-zinc-900'
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${
               isConnected
-                ? 'bg-emerald-400 animate-pulse'
+                ? 'bg-emerald-500 animate-pulse'
                 : isConnecting
-                ? 'bg-amber-400 animate-pulse'
-                : 'bg-zinc-600'
+                ? 'bg-amber-500 animate-pulse'
+                : 'bg-zinc-400 dark:bg-zinc-600'
             }`} />
             {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
           </Badge>
@@ -509,15 +563,15 @@ export function SSHTerminal({ tab }: Props) {
               variant="outline"
               size="sm"
               onClick={() => connect(true)}
-              className="h-5 px-2 text-[10.5px] bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900 hover:text-white gap-1 font-sans rounded transition-all shadow-sm"
+              className="h-5 px-2 text-[10.5px] bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-900 dark:hover:text-white gap-1 font-sans rounded transition-all shadow-sm"
               title="Reconnect to server"
             >
-              <RefreshCw className="w-3 h-3 text-emerald-400" />
+              <RefreshCw className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
               <span>Reconnect</span>
             </Button>
           )}
 
-          <span className="text-xs text-zinc-300 font-medium truncate max-w-[200px]">
+          <span className="text-xs text-zinc-800 dark:text-zinc-300 font-medium truncate max-w-[200px]">
             {tab.connection?.username || 'user'}@{tab.connection?.host || 'localhost'}:{tab.connection?.port || 22}
           </span>
 
@@ -533,10 +587,10 @@ export function SSHTerminal({ tab }: Props) {
             variant="outline"
             size="sm"
             onClick={handleDownloadLog}
-            className="h-6 px-2 text-[11px] border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-sky-400 gap-1 font-mono"
+            className="h-6 px-2 text-[11px] border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-sky-600 dark:text-sky-400 gap-1 font-mono shadow-xs"
             title="Download Session Output Log (.log)"
           >
-            <Download className="w-3 h-3 text-sky-400" />
+            <Download className="w-3 h-3 text-sky-600 dark:text-sky-400" />
             <span className="hidden sm:inline-block">Log</span>
           </Button>
 
@@ -545,20 +599,20 @@ export function SSHTerminal({ tab }: Props) {
             variant="outline"
             size="sm"
             onClick={handleOpenSFTP}
-            className="h-6 px-2 text-[11px] border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-amber-400 gap-1 font-mono"
+            className="h-6 px-2 text-[11px] border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-amber-600 dark:text-amber-400 gap-1 font-mono shadow-xs"
             title="Open SFTP for this server"
           >
             <FolderOpen className="w-3 h-3" />
             <span className="hidden sm:inline-block">SFTP Mode</span>
           </Button>
 
-          <Separator orientation="vertical" className="h-3.5 bg-zinc-800" />
+          <Separator orientation="vertical" className="h-3.5 bg-zinc-300 dark:bg-zinc-800" />
 
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={handleClear}
-            className="text-zinc-400 hover:text-white hover:bg-zinc-900 h-6 w-6"
+            className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-900 h-6 w-6"
             title="Clear Terminal Screen"
           >
             <Eraser className="w-3 h-3" />
@@ -568,33 +622,33 @@ export function SSHTerminal({ tab }: Props) {
             variant="ghost"
             size="icon-sm"
             onClick={handleCopySelection}
-            className="text-zinc-400 hover:text-white hover:bg-zinc-900 h-6 w-6"
+            className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-900 h-6 w-6"
             title="Copy Selection"
           >
             <Copy className="w-3 h-3" />
           </Button>
 
-          <Separator orientation="vertical" className="h-3.5 bg-zinc-800" />
+          <Separator orientation="vertical" className="h-3.5 bg-zinc-300 dark:bg-zinc-800" />
 
           {/* Quick Font Size Controls */}
-          <div className="flex items-center bg-zinc-900 rounded border border-zinc-800 px-1 py-0.5" title="Quick Font Size">
+          <div className="flex items-center bg-white dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 shadow-xs" title="Quick Font Size">
             <Button
               variant="ghost"
               size="icon-sm"
               onClick={() => handleZoom(-1)}
-              className="h-5 w-5 text-zinc-400 hover:text-white hover:bg-zinc-800 p-0"
+              className="h-5 w-5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 p-0"
               title="Decrease Font Size (A-)"
             >
               <ZoomOut className="w-3 h-3" />
             </Button>
-            <span className="text-[10px] font-mono text-zinc-300 px-1 min-w-[26px] text-center select-none">
+            <span className="text-[10px] font-mono text-zinc-700 dark:text-zinc-300 px-1 min-w-[26px] text-center select-none">
               {settings.fontSize}px
             </span>
             <Button
               variant="ghost"
               size="icon-sm"
               onClick={() => handleZoom(1)}
-              className="h-5 w-5 text-zinc-400 hover:text-white hover:bg-zinc-800 p-0"
+              className="h-5 w-5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 p-0"
               title="Increase Font Size (A+)"
             >
               <ZoomIn className="w-3 h-3" />
@@ -605,19 +659,19 @@ export function SSHTerminal({ tab }: Props) {
             variant="ghost"
             size="icon-sm"
             onClick={() => setShowSettings(true)}
-            className="text-zinc-400 hover:text-white hover:bg-zinc-900 h-6 w-6"
+            className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-900 h-6 w-6"
             title="Advanced Terminal & Font Settings"
           >
             <Settings2 className="w-3.5 h-3.5" />
           </Button>
 
-          <Separator orientation="vertical" className="h-3.5 bg-zinc-800" />
+          <Separator orientation="vertical" className="h-3.5 bg-zinc-300 dark:bg-zinc-800" />
 
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={() => connect(true)}
-            className="text-zinc-400 hover:text-white hover:bg-zinc-900 h-6 w-6"
+            className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-900 h-6 w-6"
             title="Restart Session"
           >
             <RefreshCw className="w-3 h-3" />
@@ -627,7 +681,7 @@ export function SSHTerminal({ tab }: Props) {
             variant="ghost"
             size="sm"
             onClick={handleDisconnect}
-            className="h-6 px-2 text-[11px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 gap-1"
+            className="h-6 px-2 text-[11px] text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 gap-1"
             title="Close SSH Connection"
           >
             <Power className="w-3 h-3" />
@@ -638,7 +692,8 @@ export function SSHTerminal({ tab }: Props) {
 
       {/* Terminal Viewport */}
       <div
-        className="flex-1 p-2 bg-black overflow-hidden relative cursor-text select-text"
+        className="flex-1 p-2 overflow-hidden relative cursor-text select-text transition-colors"
+        style={{ backgroundColor: activeTheme.background }}
         onContextMenu={handleContextMenu}
       >
         {/* Dedicated mount node for Xterm container with zero React children */}
@@ -647,8 +702,8 @@ export function SSHTerminal({ tab }: Props) {
 
       {/* Mobile Virtual Key Helper Bar (Touch Screen / Mobile Helper) */}
       {isTouchDevice && (
-        <div className="h-8 border-t border-zinc-800 bg-zinc-950 px-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 z-10 select-none">
-          <span className="text-[10px] text-zinc-500 font-mono pr-1.5 border-r border-zinc-800 shrink-0">KEYPAD</span>
+        <div className="h-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950 px-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 z-10 select-none">
+          <span className="text-[10px] text-zinc-500 font-mono pr-1.5 border-r border-zinc-200 dark:border-zinc-800 shrink-0">KEYPAD</span>
           {[
             { label: 'ESC', key: '\x1b' },
             { label: 'TAB', key: '\t' },
@@ -667,7 +722,7 @@ export function SSHTerminal({ tab }: Props) {
               key={k.label}
               type="button"
               onClick={() => sendSpecialKey(k.key)}
-              className="h-6 px-2 min-w-[28px] rounded border border-zinc-800 bg-zinc-900 active:bg-zinc-700 text-zinc-300 text-[10.5px] font-mono shrink-0 transition-colors"
+              className="h-6 px-2 min-w-[28px] rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 active:bg-zinc-200 dark:active:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[10.5px] font-mono shrink-0 transition-colors"
             >
               {k.label}
             </button>
@@ -686,76 +741,76 @@ export function SSHTerminal({ tab }: Props) {
             }}
             onContextMenu={(e) => {
               e.preventDefault();
-              setContextMenu(null);
+              handleContextMenu(e);
             }}
           />
           <div
             style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-            className="fixed z-50 min-w-[280px] w-auto rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-1.5 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-50 min-w-[280px] w-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md p-1.5 shadow-2xl text-xs font-sans animate-in fade-in zoom-in-95 duration-100 text-zinc-800 dark:text-zinc-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider select-none font-semibold">
+            <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-400 dark:text-zinc-500 uppercase tracking-wider select-none font-semibold">
               Terminal Actions
             </div>
 
             <button
               onClick={handlePaste}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
               <span className="flex items-center gap-2 whitespace-nowrap">
-                <ClipboardPaste className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <ClipboardPaste className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
                 <span>Paste from Clipboard</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+Shift+V</span>
+              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+Shift+V</span>
             </button>
 
             <button
               onClick={handleCopySelection}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
               <span className="flex items-center gap-2 whitespace-nowrap">
-                <Copy className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <Copy className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400 shrink-0" />
                 <span>Copy Selection</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+Shift+C</span>
+              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+Shift+C</span>
             </button>
 
             <button
               onClick={handleSelectAll}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
               <span className="flex items-center gap-2 whitespace-nowrap">
-                <CheckSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <CheckSquare className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400 shrink-0" />
                 <span>Select All</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+A</span>
+              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+A</span>
             </button>
 
             <button
               onClick={handleClear}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
               <span className="flex items-center gap-2 whitespace-nowrap">
-                <Eraser className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <Eraser className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
                 <span>Clear Screen</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Ctrl+L</span>
+              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+L</span>
             </button>
 
-            <div className="h-px bg-zinc-800/80 my-1" />
+            <div className="h-px bg-zinc-200 dark:bg-zinc-800/80 my-1" />
 
             <button
               onClick={() => {
                 setContextMenu(null);
                 handleDownloadLog();
               }}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
               <span className="flex items-center gap-2 whitespace-nowrap">
-                <Download className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <Download className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400 shrink-0" />
                 <span>Download Session Log</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-500 shrink-0">.log</span>
+              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">.log</span>
             </button>
 
             <button
@@ -763,9 +818,9 @@ export function SSHTerminal({ tab }: Props) {
                 setContextMenu(null);
                 setShowSettings(true);
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
-              <Settings2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <Settings2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400 shrink-0" />
               Appearance & Font Settings
             </button>
 
@@ -774,9 +829,9 @@ export function SSHTerminal({ tab }: Props) {
                 setContextMenu(null);
                 handleOpenSFTP();
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
-              <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <FolderOpen className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
               Open SFTP Manager
             </button>
 
@@ -785,20 +840,20 @@ export function SSHTerminal({ tab }: Props) {
                 setContextMenu(null);
                 connect(true);
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors select-none"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <RefreshCw className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400 shrink-0" />
               Restart Session
             </button>
 
-            <div className="h-px bg-zinc-800/80 my-1" />
+            <div className="h-px bg-zinc-200 dark:bg-zinc-800/80 my-1" />
 
             <button
               onClick={() => {
                 setContextMenu(null);
                 handleDisconnect();
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors select-none"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors select-none"
             >
               <Power className="w-3.5 h-3.5 shrink-0" />
               Close Session

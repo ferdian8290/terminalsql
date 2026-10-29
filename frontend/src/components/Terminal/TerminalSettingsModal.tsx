@@ -13,12 +13,12 @@ export interface TerminalSettings {
   fontWeight: 'normal' | '500' | '600' | 'bold';
   cursorStyle: 'block' | 'underline' | 'bar';
   cursorBlink: boolean;
-  themePreset: 'putty' | 'dracula' | 'oneDark' | 'monokai';
+  themePreset: 'auto' | 'putty' | 'dracula' | 'oneDark' | 'monokai' | 'oneLight' | 'solarizedLight';
   copyOnSelect: boolean;
   rightClickAction: 'menu' | 'paste';
 }
 
-export const TERMINAL_THEMES = {
+export const TERMINAL_THEMES: Record<string, any> = {
   putty: {
     name: 'Pitch Black (Default)',
     background: '#000000',
@@ -41,6 +41,52 @@ export const TERMINAL_THEMES = {
     brightMagenta: '#ff55ff',
     brightCyan: '#55ffff',
     brightWhite: '#ffffff',
+  },
+  oneLight: {
+    name: 'GitHub / One Light',
+    background: '#ffffff',
+    foreground: '#24292e',
+    cursor: '#044289',
+    cursorAccent: '#ffffff',
+    black: '#24292e',
+    red: '#d73a49',
+    green: '#22863a',
+    yellow: '#b08800',
+    blue: '#0366d6',
+    magenta: '#6f42c1',
+    cyan: '#1b7c83',
+    white: '#6a737d',
+    brightBlack: '#959da5',
+    brightRed: '#cb2431',
+    brightGreen: '#28a745',
+    brightYellow: '#dbab09',
+    brightBlue: '#2188ff',
+    brightMagenta: '#8a63d2',
+    brightCyan: '#3192aa',
+    brightWhite: '#fafbfc',
+  },
+  solarizedLight: {
+    name: 'Solarized Light',
+    background: '#fdf6e3',
+    foreground: '#657b83',
+    cursor: '#586e75',
+    cursorAccent: '#fdf6e3',
+    black: '#073642',
+    red: '#dc322f',
+    green: '#859900',
+    yellow: '#b58900',
+    blue: '#268bd2',
+    magenta: '#d33682',
+    cyan: '#2aa198',
+    white: '#eee8d5',
+    brightBlack: '#002b36',
+    brightRed: '#cb4b16',
+    brightGreen: '#586e75',
+    brightYellow: '#657b83',
+    brightBlue: '#839496',
+    brightMagenta: '#6c71c4',
+    brightCyan: '#93a1a1',
+    brightWhite: '#fdf6e3',
   },
   dracula: {
     name: 'Dracula Dark',
@@ -131,7 +177,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontWeight: 'normal',
   cursorStyle: 'block',
   cursorBlink: true,
-  themePreset: 'putty',
+  themePreset: 'auto',
   copyOnSelect: true,
   rightClickAction: 'menu',
 };
@@ -158,7 +204,9 @@ export function TerminalSettingsModal({ settings: initial, onSave, onClose }: Pr
     setForm({ ...DEFAULT_TERMINAL_SETTINGS });
   }
 
-  const activeTheme = TERMINAL_THEMES[form.themePreset] || TERMINAL_THEMES.putty;
+  const activeTheme = form.themePreset === 'auto' 
+    ? TERMINAL_THEMES.putty 
+    : (TERMINAL_THEMES[form.themePreset] || TERMINAL_THEMES.putty);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -363,6 +411,21 @@ export function TerminalSettingsModal({ settings: initial, onSave, onClose }: Pr
           <div className="space-y-1.5">
             <Label className="text-zinc-300">Color Palette Preset</Label>
             <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => update('themePreset', 'auto')}
+                className={`p-2 rounded-md border text-left flex items-center justify-between transition-all col-span-2 ${
+                  form.themePreset === 'auto'
+                    ? 'border-white bg-zinc-800 text-white shadow-sm'
+                    : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 bg-gradient-to-r from-zinc-900 to-zinc-100" />
+                  <span className="text-[11px] font-mono">Auto (Follow Light / Dark App Mode)</span>
+                </div>
+                {form.themePreset === 'auto' && <Check className="w-3 h-3 text-emerald-400" />}
+              </button>
               {Object.entries(TERMINAL_THEMES).map(([key, t]) => {
                 const isSelected = form.themePreset === key;
                 return (
