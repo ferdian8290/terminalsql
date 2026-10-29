@@ -41,6 +41,7 @@ export function TabBar() {
     setSplitMode,
     draggingTabId,
     setDraggingTabId,
+    tabStatuses,
   } = useAppStore();
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -146,7 +147,7 @@ export function TabBar() {
               {tab.type === 'database' ? (
                 getDatabaseBrandIcon(tab.connection, tab.connection?.dbType, 'w-3 h-3 shrink-0')
               ) : (
-                <Icon className={`w-3 h-3 shrink-0 ${isActive ? accent.icon : 'text-muted-foreground'}`} />
+                <Icon className={`w-3 h-3 shrink-0 ${tab.type === 'ssh' ? (tabStatuses[tab.id] === 'connected' ? 'text-emerald-400' : 'text-zinc-500') : (isActive ? accent.icon : 'text-muted-foreground')}`} />
               )}
 
               {isEditing ? (

@@ -330,14 +330,20 @@ export async function sshRoutes(app: FastifyInstance) {
     }
 
     // Set standard Server-Sent Events headers (passed by all corporate proxies)
-    reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
-    reply.raw.setHeader('Connection', 'keep-alive');
-    reply.raw.setHeader('X-Accel-Buffering', 'no'); // Disable proxy buffering (Nginx, BlueCoat, Fortinet)
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // Disable proxy buffering (Nginx, BlueCoat, Fortinet)
+    });
     reply.raw.flushHeaders?.();
 
+    // Send 2KB initial comment padding to immediately defeat proxy buffering
+    reply.raw.write(`: ${' '.repeat(2048)}\n\n`);
+
     // Send connected event
-    reply.raw.write(`data: ${JSON.stringify({ type: 'connected', message: 'Connected via HTTP Tunnel' })}\n\n`);
+    reply.raw.write(`data: ${JSON.stringify({ type: 'connected', message: 'Connected' })}\n\n`);
 
     // Replay terminal buffer history
     if (session.outputBuffer.length > 0) {

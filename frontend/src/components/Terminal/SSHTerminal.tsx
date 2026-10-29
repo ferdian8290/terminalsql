@@ -136,7 +136,7 @@ export function SSHTerminal({ tab }: Props) {
   const [termSize, setTermSize] = useState({ cols: 80, rows: 24 });
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [transport, setTransport] = useState<'ws' | 'http'>('ws');
+  const [, setTransport] = useState<'ws' | 'http'>('ws');
   const [settings, setSettings] = useState<TerminalSettings>(getStoredSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -334,7 +334,6 @@ export function SSHTerminal({ tab }: Props) {
         if (!sessionRegistry.has(tab.id)) return;
         setTransport('http');
         if (session) session.transport = 'http';
-        term.writeln('\r\n\x1b[36m● Corporate proxy detected. Switching to HTTP Streaming Tunnel...\x1b[0m');
         try {
           const res = await fetch(`/api/ssh/http/connect/${tab.connectionId}`, {
             method: 'POST',
@@ -343,7 +342,7 @@ export function SSHTerminal({ tab }: Props) {
           });
           const data = await res.json();
           if (!data.ok || !data.sessionToken) {
-            throw new Error(data.error || 'Failed to establish HTTP tunnel');
+            throw new Error(data.error || 'Failed to establish connection');
           }
 
           const httpToken = data.sessionToken;
@@ -362,7 +361,6 @@ export function SSHTerminal({ tab }: Props) {
                 setIsConnecting(false);
                 setIsConnected(true);
                 setTabStatus(tab.id, 'connected');
-                term.writeln(`\r\n\x1b[32m✔ ${msg.message}\x1b[0m\r\n`);
                 sendTerminalResize(session!, term.cols, term.rows);
               } else if (msg.type === 'status') {
                 term.writeln(`\r\n\x1b[33m● ${msg.message}\x1b[0m\r\n`);
@@ -392,7 +390,7 @@ export function SSHTerminal({ tab }: Props) {
           setIsConnecting(false);
           setIsConnected(false);
           setTabStatus(tab.id, 'disconnected');
-          term.writeln(`\r\n\x1b[31m✗ HTTP Tunnel Error: ${err.message}\x1b[0m\r\n`);
+          term.writeln(`\r\n\x1b[31m✗ Connection failed: ${err.message}\x1b[0m\r\n`);
         }
       };
 
@@ -402,6 +400,15 @@ export function SSHTerminal({ tab }: Props) {
       const wsUrl = `${proto}//${window.location.host}/api/ssh/connect/${tab.connectionId}?tabId=${encodeURIComponent(tab.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
       
       let wsHandshakeSuccess = false;
+      let fallbackTriggered = false;
+
+      const triggerHttpFallback = () => {
+        if (fallbackTriggered) return;
+        fallbackTriggered = true;
+        try { ws.close(); } catch {}
+        startHttpTunnel();
+      };
+
       const ws = new WebSocket(wsUrl);
       session.ws = ws;
 
@@ -414,7 +421,6 @@ export function SSHTerminal({ tab }: Props) {
         setIsConnecting(false);
         setIsConnected(true);
         setTabStatus(tab.id, 'connected');
-        term.writeln('\r\n\x1b[32m● SSH: Connected. Authenticating...\x1b[0m\r\n');
         sendTerminalResize(session!, term.cols, term.rows);
       };
 
@@ -428,7 +434,6 @@ export function SSHTerminal({ tab }: Props) {
             setIsConnecting(false);
             setIsConnected(true);
             setTabStatus(tab.id, 'connected');
-            term.writeln(`\r\n\x1b[32m✔ ${msg.message}\x1b[0m\r\n`);
           } else if (msg.type === 'error') {
             term.writeln(`\r\n\x1b[31m✗ ${msg.message}\x1b[0m\r\n`);
           }
@@ -446,8 +451,7 @@ export function SSHTerminal({ tab }: Props) {
         if (!sessionRegistry.has(tab.id)) return;
         if (!wsHandshakeSuccess && (event.code === 1006 || event.code === 1005)) {
           // Handshake blocked by corporate proxy -> auto fallback to HTTP streaming!
-          try { ws.close(); } catch {}
-          startHttpTunnel();
+          triggerHttpFallback();
           return;
         }
 
@@ -461,8 +465,7 @@ export function SSHTerminal({ tab }: Props) {
       ws.onerror = () => {
         if (!sessionRegistry.has(tab.id)) return;
         if (!wsHandshakeSuccess) {
-          try { ws.close(); } catch {}
-          startHttpTunnel();
+          triggerHttpFallback();
           return;
         }
         session!.isConnected = false;
@@ -700,7 +703,7 @@ export function SSHTerminal({ tab }: Props) {
                 ? 'bg-amber-500 animate-pulse'
                 : 'bg-zinc-400 dark:bg-zinc-600'
             }`} />
-            {isConnected ? (transport === 'http' ? 'Connected (HTTP Tunnel)' : 'Connected') : isConnecting ? 'Connecting...' : 'Disconnected'}
+            {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
           </Badge>
 
           {!isConnected && !isConnecting && (
