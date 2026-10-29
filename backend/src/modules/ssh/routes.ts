@@ -27,6 +27,8 @@ const persistentSessions = new Map<string, PersistentSession>();
 export async function sshRoutes(app: FastifyInstance) {
   // WebSocket: GET /api/ssh/connect/:connectionId
   app.get('/connect/:connectionId', { websocket: true } as any, async (socket: any, request: any) => {
+    console.log(`[SSH-WS] New WebSocket connection attempt for: ${request.params?.connectionId} from ${request.headers?.['x-forwarded-for'] || request.ip}`);
+    console.log(`[SSH-WS] Origin: ${request.headers.origin}, Host: ${request.headers.host}`);
     const db = getDb();
     const { connectionId } = request.params as { connectionId: string };
     const query = (request.query as any) || {};

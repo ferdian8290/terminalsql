@@ -599,17 +599,17 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
               {isDb ? (
                 getDatabaseIcon(conn)
               ) : isSsh ? (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <Terminal className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-emerald-400' : 'text-zinc-400'}`} />
               ) : (
-                <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-amber-400' : 'text-zinc-400'}`} />
               )}
 
-              {isDb && isConnected && (
+              {isConnected && (
                 <span
                   className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-zinc-950 flex items-center justify-center"
-                  title="Connected"
+                  title="Connected Active Session"
                 >
-                  <Check className="w-1.5 h-1.5 text-zinc-950 stroke-[3]" />
+                  <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
                 </span>
               )}
             </div>
@@ -672,13 +672,15 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                       ) : (
                         <ChevronRight className="w-3 h-3 text-foreground" />
                       )
+                    ) : isConnected ? (
+                      <RefreshCw className="w-2.5 h-2.5 text-emerald-400" />
                     ) : (
                       <Play className="w-2.5 h-2.5 fill-current" />
                     )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  <p>{isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : 'Connect'}</p>
+                  <p>{isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

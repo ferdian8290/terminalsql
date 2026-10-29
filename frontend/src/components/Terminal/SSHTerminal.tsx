@@ -464,6 +464,19 @@ export function SSHTerminal({ tab }: Props) {
             {isConnected ? 'Connected' : 'Disconnected'}
           </Badge>
 
+          {!isConnected && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => connect(true)}
+              className="h-5 px-2 text-[10.5px] bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900 hover:text-white gap-1 font-sans rounded transition-all shadow-sm"
+              title="Reconnect to server"
+            >
+              <RefreshCw className="w-3 h-3 text-emerald-400" />
+              <span>Reconnect</span>
+            </Button>
+          )}
+
           <span className="text-xs text-zinc-300 font-medium truncate max-w-[200px]">
             {tab.connection.username}@{tab.connection.host}:{tab.connection.port}
           </span>
@@ -588,7 +601,21 @@ export function SSHTerminal({ tab }: Props) {
         className="flex-1 p-2 bg-black overflow-hidden relative cursor-text select-text"
         ref={termRef}
         onContextMenu={handleContextMenu}
-      />
+      >
+        {!isConnected && (
+          <div className="absolute top-4 right-4 z-20 animate-in fade-in-0 duration-150">
+            <Button
+              size="sm"
+              onClick={() => connect(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-7 px-3 gap-1.5 shadow-xl border border-emerald-400/40 font-sans cursor-pointer"
+              title="Click to reconnect this session"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Reconnect</span>
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Mobile Virtual Key Helper Bar (Touch Screen / Mobile Helper) */}
       {isTouchDevice && (

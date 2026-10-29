@@ -37,7 +37,7 @@ async function bootstrap() {
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     reply.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:;"
+      "default-src 'self'; connect-src 'self' ws: wss: http: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:;"
     );
   });
 
@@ -117,7 +117,7 @@ async function bootstrap() {
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',
-    version: '1.3.3',
+    version: '1.3.4',
     timestamp: new Date().toISOString(),
   }));
 
