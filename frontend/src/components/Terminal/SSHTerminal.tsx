@@ -601,9 +601,11 @@ export function SSHTerminal({ tab }: Props) {
       {/* Terminal Viewport */}
       <div
         className="flex-1 p-2 bg-black overflow-hidden relative cursor-text select-text"
-        ref={termRef}
         onContextMenu={handleContextMenu}
       >
+        {/* Dedicated mount node for Xterm container with zero React children */}
+        <div ref={termRef} className="w-full h-full" />
+
         {!isConnected && (
           <div className="absolute top-4 right-4 z-20 animate-in fade-in-0 duration-150">
             <Button
