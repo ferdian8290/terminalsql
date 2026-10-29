@@ -626,19 +626,17 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
             {isConnected && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse"
-                title="Active Session Connected"
               />
             )}
           </div>
 
           {/* Right: Connect or Expand/Collapse Button (Always visible on hover, strictly 1-word tooltip) */}
-          <div className="flex items-center shrink-0 ml-auto pl-1 pr-0.5">
+          <div className="flex items-center shrink-0 ml-auto pl-1 pr-1">
             <TooltipProvider delayDuration={400}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    title={isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isSsh) {
@@ -679,11 +677,11 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                     ) : isConnected ? (
                       <RefreshCw className="w-2.5 h-2.5 text-emerald-400" />
                     ) : (
-                      <Play className="w-2.5 h-2.5 fill-current" />
+                      <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
                     )}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" align="end" sideOffset={6} className="text-[10px] py-0.5 px-1.5 font-sans pointer-events-none shadow-md z-50">
+                <TooltipContent side="top" align="end" sideOffset={4} className="text-[10px] font-medium py-0.5 px-1.5 font-sans pointer-events-none shadow-md z-50">
                   <p>{isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}</p>
                 </TooltipContent>
               </Tooltip>

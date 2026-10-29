@@ -82,35 +82,49 @@ DOCKER_IMG_DIR="${LOCAL_DIR}/docker-images"
 mkdir -p "$DOCKER_IMG_DIR"
 TAR_FILE="${DOCKER_IMG_DIR}/terminalsql-images.tar.gz"
 
-# Check if local and remote images already match
-echo -e "\n${YELLOW}🔎 [2/6] Checking Docker image hash between local and remote...${NC}"
-LOCAL_IMG_HASH=$(docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' 2>/dev/null | sha256sum | awk '{print $1}' || echo "LOCAL_BUILD_NEEDED")
-REMOTE_IMG_HASH=$(ssh -o BatchMode=yes "$REMOTE_HOST" "cat ${REMOTE_DIR}/.remote_image_hash 2>/dev/null || docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' 2>/dev/null | sha256sum | awk '{print \$1}'" 2>/dev/null || echo "REMOTE_FETCH_NEEDED")
+# 2. Check codebase state and determine if local Docker build is needed
+echo -e "\n${YELLOW}🔎 [2/6] Checking codebase state and Docker image hashes...${NC}"
+SOURCE_HASH=$( (git rev-parse HEAD 2>/dev/null || echo "nogit"; git status --porcelain 2>/dev/null; git diff HEAD 2>/dev/null) | sha256sum | awk '{print $1}' )
+LAST_BUILT_HASH=$(cat "${DOCKER_IMG_DIR}/.last_built_source_hash" 2>/dev/null || echo "")
 
-NEED_IMAGE_SYNC=true
-if [[ "$LOCAL_IMG_HASH" == "$REMOTE_IMG_HASH" && "$LOCAL_IMG_HASH" != "LOCAL_BUILD_NEEDED" && "$ACTION" != "force" && -f "$TAR_FILE" ]]; then
-  NEED_IMAGE_SYNC=false
-  echo -e "${GREEN}✓ Remote Docker daemon already has the exact image build (${LOCAL_IMG_HASH:0:12}).${NC}"
-  echo -e "${CYAN}⚡ Fast-sync mode: Skipping 150MB image transfer. Synchronizing only configuration & metadata...${NC}"
+NEED_LOCAL_BUILD=false
+if [[ "$SOURCE_HASH" != "$LAST_BUILT_HASH" || "$ACTION" == "force" || ! -f "$TAR_FILE" ]]; then
+  NEED_LOCAL_BUILD=true
 fi
 
-if [[ "$NEED_IMAGE_SYNC" == "true" ]]; then
-  # 2. Build Images Locally
-  echo -e "\n${YELLOW}🔨 Building production Docker images locally...${NC}"
+# Verify if both local images exist
+if ! docker image inspect terminalsql-backend:latest terminalsql-frontend:latest >/dev/null 2>&1; then
+  NEED_LOCAL_BUILD=true
+fi
+
+if [[ "$NEED_LOCAL_BUILD" == "true" ]]; then
+  echo -e "${YELLOW}🔨 Source code change detected or image build requested. Building Docker images locally...${NC}"
   cd "$LOCAL_DIR"
   docker build --network host -t terminalsql-backend:latest ./backend
   docker build --network host -t terminalsql-frontend:latest ./frontend
   echo -e "${GREEN}✓ Local Docker images built successfully.${NC}"
 
-  # Update hash after build
-  LOCAL_IMG_HASH=$(docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' | sha256sum | awk '{print $1}')
-  echo "$LOCAL_IMG_HASH" > "${DOCKER_IMG_DIR}/.image_hash"
+  echo "$SOURCE_HASH" > "${DOCKER_IMG_DIR}/.last_built_source_hash"
 
   # 3. Export Images to Persistent Local Archive (Never in /tmp)
   echo -e "\n${YELLOW}📦 [3/6] Saving images to persistent archive: ${TAR_FILE}...${NC}"
   docker save terminalsql-backend:latest terminalsql-frontend:latest | gzip > "$TAR_FILE"
   ARCHIVE_SIZE=$(du -h "$TAR_FILE" | cut -f1)
   echo -e "${GREEN}✓ Image archive ready in project directory (${ARCHIVE_SIZE}).${NC}"
+else
+  echo -e "${GREEN}✓ Source code unchanged since last image build (${SOURCE_HASH:0:12}). Skipping local build.${NC}"
+fi
+
+# Determine if image sync to remote is required
+LOCAL_IMG_HASH=$(docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' 2>/dev/null | sha256sum | awk '{print $1}')
+echo "$LOCAL_IMG_HASH" > "${DOCKER_IMG_DIR}/.image_hash"
+REMOTE_IMG_HASH=$(ssh -o BatchMode=yes "$REMOTE_HOST" "cat ${REMOTE_DIR}/.remote_image_hash 2>/dev/null || docker image inspect terminalsql-backend:latest terminalsql-frontend:latest --format '{{.Id}}' 2>/dev/null | sha256sum | awk '{print \$1}'" 2>/dev/null || echo "REMOTE_FETCH_NEEDED")
+
+NEED_IMAGE_SYNC=true
+if [[ "$LOCAL_IMG_HASH" == "$REMOTE_IMG_HASH" && "$ACTION" != "force" ]]; then
+  NEED_IMAGE_SYNC=false
+  echo -e "${GREEN}✓ Remote Docker daemon already has the exact image build (${LOCAL_IMG_HASH:0:12}).${NC}"
+  echo -e "${CYAN}⚡ Fast-sync mode: Skipping 150MB image transfer. Synchronizing only configuration & metadata...${NC}"
 fi
 
 # 4. Synchronize Codebase & Configs (Strictly preserving remote database & excluding image binaries)
@@ -205,7 +219,11 @@ fi
 
 # 6. Start Containers & Healthcheck
 echo -e "\n${YELLOW}⚡ [6/6] Launching containers and verifying health status...${NC}"
-ssh -o BatchMode=yes "$REMOTE_HOST" "chmod -R 777 ${REMOTE_DIR}/backend/data && echo '${LOCAL_IMG_HASH}' > ${REMOTE_DIR}/.remote_image_hash && cd ${REMOTE_DIR} && docker compose up -d"
+if [[ "$NEED_IMAGE_SYNC" == "true" ]]; then
+  ssh -o BatchMode=yes "$REMOTE_HOST" "chmod -R 777 ${REMOTE_DIR}/backend/data && echo '${LOCAL_IMG_HASH}' > ${REMOTE_DIR}/.remote_image_hash && cd ${REMOTE_DIR} && docker compose up -d --force-recreate"
+else
+  ssh -o BatchMode=yes "$REMOTE_HOST" "chmod -R 777 ${REMOTE_DIR}/backend/data && cd ${REMOTE_DIR} && docker compose up -d"
+fi
 
 sleep 3
 echo ""

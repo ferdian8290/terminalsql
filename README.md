@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.5-purple)
+![Version](https://img.shields.io/badge/Version-1.5.6-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -291,6 +291,10 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.6] - 2026-10-30
+- **Action Button Precision Positioning**: Refined sidebar connect button spacing (`pr-1`), optically centered play icon (`ml-0.5`), and removed native HTML `title` attributes to eliminate conflicting horizontal browser tooltips.
+- **Smart Image Build & Sync Tracking**: Enhanced `sync_to_docker.sh` with codebase source change tracking (`.last_built_source_hash`) so Docker rebuilds are triggered whenever source code changes while keeping metadata sync instant (~2s) for config edits.
 
 ### [v1.5.5] - 2026-10-29
 - **Smart Docker Image Hash Diffing**: Upgraded `sync_to_docker.sh` to compare local vs remote image hashes before deployment. Skips redundant 150MB transfers and `docker load` if remote images already match, completing metadata & config syncs in ~2 seconds.
