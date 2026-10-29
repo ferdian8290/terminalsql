@@ -69,6 +69,7 @@ export function SSHTerminal({ tab }: Props) {
   const fitRef = useRef<FitAddon | null>(null);
   const [termSize, setTermSize] = useState({ cols: 80, rows: 24 });
   const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [settings, setSettings] = useState<TerminalSettings>(getStoredSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -174,12 +175,19 @@ export function SSHTerminal({ tab }: Props) {
     const isClosed = session?.ws && (session.ws.readyState === WebSocket.CLOSED || session.ws.readyState === WebSocket.CLOSING);
 
     if (!session || forceNew || isClosed) {
+      setIsConnecting(true);
+      setIsConnected(false);
+
       if (session) {
         try {
           if (session.ws.readyState === WebSocket.OPEN) session.ws.close();
           session.term.dispose();
-          if (session.container.parentNode) session.container.parentNode.removeChild(session.container);
+          // Safe DOM detach — avoid removeChild crash when node ownership has shifted
+          if (session.container.parentNode) {
+            try { session.container.parentNode.removeChild(session.container); } catch { }
+          }
         } catch { }
+        sessionRegistry.delete(tab.id);
       }
 
       const container = document.createElement('div');
@@ -228,6 +236,7 @@ export function SSHTerminal({ tab }: Props) {
       ws.onopen = () => {
         if (!sessionRegistry.has(tab.id)) return;
         session!.isConnected = true;
+        setIsConnecting(false);
         setIsConnected(true);
         term.writeln('\r\n\x1b[32m● SSH: Connected. Authenticating...\x1b[0m\r\n');
         if (ws.readyState === WebSocket.OPEN) {
@@ -258,6 +267,7 @@ export function SSHTerminal({ tab }: Props) {
       ws.onclose = (event) => {
         if (!sessionRegistry.has(tab.id)) return;
         session!.isConnected = false;
+        setIsConnecting(false);
         setIsConnected(false);
         term.writeln(`\r\n\x1b[33m● Session closed (${event.reason || 'code ' + event.code})\x1b[0m\r\n`);
       };
@@ -265,6 +275,7 @@ export function SSHTerminal({ tab }: Props) {
       ws.onerror = () => {
         if (!sessionRegistry.has(tab.id)) return;
         session!.isConnected = false;
+        setIsConnecting(false);
         setIsConnected(false);
         term.writeln('\r\n\x1b[31m✗ Connection error\x1b[0m\r\n');
       };
@@ -302,7 +313,10 @@ export function SSHTerminal({ tab }: Props) {
     // Mount container into termRef.current DOM node
     if (termRef.current) {
       if (!termRef.current.contains(session.container)) {
-        termRef.current.innerHTML = '';
+        // Safe clear — avoid innerHTML = '' which can cause removeChild crashes
+        while (termRef.current.firstChild) {
+          try { termRef.current.removeChild(termRef.current.firstChild); } catch { break; }
+        }
         termRef.current.appendChild(session.container);
       }
       setTimeout(() => {
@@ -472,16 +486,25 @@ export function SSHTerminal({ tab }: Props) {
         <div className="flex items-center gap-2 shrink-0">
           <Badge
             variant="outline"
-            className={`text-[10px] py-0 px-1.5 h-4 flex items-center gap-1 font-mono ${isConnected
-              ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40'
-              : 'border-zinc-700 text-zinc-500 bg-zinc-900'
-              }`}
+            className={`text-[10px] py-0 px-1.5 h-4 flex items-center gap-1 font-mono ${
+              isConnected
+                ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40'
+                : isConnecting
+                ? 'border-amber-500/40 text-amber-400 bg-amber-950/40'
+                : 'border-zinc-700 text-zinc-500 bg-zinc-900'
+            }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-            {isConnected ? 'Connected' : 'Disconnected'}
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              isConnected
+                ? 'bg-emerald-400 animate-pulse'
+                : isConnecting
+                ? 'bg-amber-400 animate-pulse'
+                : 'bg-zinc-600'
+            }`} />
+            {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
           </Badge>
 
-          {!isConnected && (
+          {!isConnected && !isConnecting && (
             <Button
               variant="outline"
               size="sm"
@@ -620,20 +643,6 @@ export function SSHTerminal({ tab }: Props) {
       >
         {/* Dedicated mount node for Xterm container with zero React children */}
         <div ref={termRef} className="w-full h-full" />
-
-        {!isConnected && (
-          <div className="absolute top-4 right-4 z-20 animate-in fade-in-0 duration-150">
-            <Button
-              size="sm"
-              onClick={() => connect(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-7 px-3 gap-1.5 shadow-xl border border-emerald-400/40 font-sans cursor-pointer"
-              title="Click to reconnect this session"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reconnect</span>
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Mobile Virtual Key Helper Bar (Touch Screen / Mobile Helper) */}
