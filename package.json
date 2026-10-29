@@ -1,0 +1,20 @@
+{
+  "name": "terminalsql",
+  "version": "1.3.0",
+  "description": "TerminalSQL — Web-based SSH, DB Query Editor, and SFTP File Manager",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "./start.sh",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "sync": "./sync_to_server.sh",
+    "sync:web": "./sync_web.sh",
+    "sync:all": "./sync_to_server.sh all",
+    "start": "./start.sh"
+  },
+  "keywords": ["ssh", "terminal", "sql", "dbeaver", "sftp", "filezilla", "web-terminal"],
+  "author": "",
+  "license": "MIT"
+}

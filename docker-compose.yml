@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      network: host
+    ports:
+      - "${BACKEND_PORT:-3002}:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - JWT_SECRET=${JWT_SECRET:-terminalsql_jwt_secret_key_production_32chars}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-terminalsql_master_aes256_encryption_key_32c}
+      - DB_PATH=/app/data/terminalsql.db
+      - ALLOWED_ORIGINS=${FRONTEND_URL:-http://localhost:5175},http://localhost:3002,http://127.0.0.1:5175
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5175}
+    volumes:
+      # Persistent host directory for SQLite database (shared with native systemd service)
+      - ./backend/data:/app/data
+    restart: unless-stopped
+    networks:
+      - terminalsql-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      network: host
+    ports:
+      - "${FRONTEND_PORT:-5175}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - terminalsql-net
+
+networks:
+  terminalsql-net:
+    driver: bridge

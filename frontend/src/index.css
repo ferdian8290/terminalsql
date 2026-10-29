@@ -1,0 +1,351 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --radius: 0.5rem;
+
+    /* High-Density Compact Enterprise Typography Scale */
+    --font-2xs: 9.5px;
+    --font-xs: 11px;
+    --font-sm: 12px;
+    --font-base: 13px;
+    --font-md: 14px;
+
+    --row-tree: 20px;
+    --row-item: 28px;
+    --row-toolbar: 36px;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  html,
+  body,
+  #root {
+    overscroll-behavior: none;
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: var(--font-xs);
+    line-height: 1.35;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .text-compact-xs {
+    font-size: var(--font-xs);
+    line-height: 1.25;
+  }
+  .text-compact-2xs {
+    font-size: var(--font-2xs);
+    line-height: 1.25;
+  }
+  .text-compact-sm {
+    font-size: var(--font-sm);
+    line-height: 1.25;
+  }
+  .h-row-tree {
+    height: var(--row-tree);
+  }
+  .h-row-item {
+    height: var(--row-item);
+  }
+}
+
+/* Custom scrollbars matching shadcn */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(240 3.7% 20%);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 3.7% 30%);
+}
+
+/* Crisp Terminal Font Rendering on Full HD Displays */
+.xterm {
+  padding: 4px;
+}
+.xterm-viewport {
+  background-color: transparent !important;
+}
+.xterm-screen canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* ==========================================================================
+   GLOBAL ENTERPRISE LIGHT & DARK THEME ENGINE
+   Automatically enforces high-contrast, crystal-clear typography, backgrounds,
+   borders, and states across all components without manual per-class edits.
+   ========================================================================== */
+
+/* ------------------ LIGHT MODE GLOBAL RULES ------------------ */
+html.light,
+html:not(.dark) {
+  color-scheme: light;
+}
+
+html.light body,
+html:not(.dark) body {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+
+/* Primary text & headers in light mode */
+html.light .text-white,
+html:not(.dark) .text-white,
+html.light .text-zinc-100,
+html:not(.dark) .text-zinc-100,
+html.light .text-zinc-200,
+html:not(.dark) .text-zinc-200,
+html.light .text-zinc-300,
+html:not(.dark) .text-zinc-300 {
+  color: #09090b !important;
+}
+
+/* Secondary & metadata text in light mode (e.g. host:port, row counts, descriptions) */
+html.light .text-zinc-400,
+html:not(.dark) .text-zinc-400,
+html.light .text-zinc-500,
+html:not(.dark) .text-zinc-500 {
+  color: #3f3f46 !important; /* Zinc 700: deep readable charcoal */
+}
+
+html.light .text-zinc-600,
+html:not(.dark) .text-zinc-600 {
+  color: #52525b !important; /* Zinc 600 */
+}
+
+/* Hover text in light mode */
+html.light .hover\:text-white:hover,
+html:not(.dark) .hover\:text-white:hover,
+html.light .hover\:text-zinc-100:hover,
+html:not(.dark) .hover\:text-zinc-100:hover,
+html.light .hover\:text-zinc-200:hover,
+html:not(.dark) .hover\:text-zinc-200:hover,
+html.light .group:hover .group-hover\:text-white,
+html:not(.dark) .group:hover .group-hover\:text-white {
+  color: #000000 !important;
+}
+
+/* Backgrounds in light mode */
+html.light .bg-zinc-950,
+html:not(.dark) .bg-zinc-950,
+html.light .bg-zinc-900,
+html:not(.dark) .bg-zinc-900,
+html.light [class*="bg-zinc-900/"],
+html:not(.dark) [class*="bg-zinc-900/"] {
+  background-color: #ffffff !important;
+}
+
+/* Sub-panels, secondary containers, and badges in light mode */
+html.light .bg-zinc-800,
+html:not(.dark) .bg-zinc-800,
+html.light [class*="bg-zinc-800/"],
+html:not(.dark) [class*="bg-zinc-800/"] {
+  background-color: #f4f4f5 !important; /* Zinc 100 */
+}
+
+/* Hover backgrounds on items and tree nodes */
+html.light .hover\:bg-zinc-800\/60:hover,
+html:not(.dark) .hover\:bg-zinc-800\/60:hover,
+html.light .hover\:bg-zinc-800\/50:hover,
+html:not(.dark) .hover\:bg-zinc-800\/50:hover,
+html.light .hover\:bg-zinc-800\/40:hover,
+html:not(.dark) .hover\:bg-zinc-800\/40:hover,
+html.light .hover\:bg-zinc-800:hover,
+html:not(.dark) .hover\:bg-zinc-800:hover,
+html.light .hover\:bg-zinc-900\/90:hover,
+html:not(.dark) .hover\:bg-zinc-900\/90:hover,
+html.light .hover\:bg-zinc-900:hover,
+html:not(.dark) .hover\:bg-zinc-900:hover {
+  background-color: #e4e4e7 !important; /* Zinc 200 clean hover */
+  color: #000000 !important;
+}
+
+/* Selected tree & table nodes in light mode */
+html.light .bg-sky-950\/60,
+html:not(.dark) .bg-sky-950\/60 {
+  background-color: #e0f2fe !important; /* Sky 100 */
+  color: #0369a1 !important; /* Sky 700 */
+}
+
+html.light .text-sky-200,
+html:not(.dark) .text-sky-200 {
+  color: #0369a1 !important;
+}
+
+/* Borders in light mode */
+html.light .border-zinc-800,
+html:not(.dark) .border-zinc-800,
+html.light [class*="border-zinc-800/"],
+html:not(.dark) [class*="border-zinc-800/"],
+html.light .border-zinc-700,
+html:not(.dark) .border-zinc-700,
+html.light [class*="border-zinc-700/"],
+html:not(.dark) [class*="border-zinc-700/"] {
+  border-color: #e4e4e7 !important; /* Zinc 200: clean enterprise separator */
+}
+
+/* Contrast enhancement for colored brand and state icons in light mode */
+html.light .text-amber-400,
+html:not(.dark) .text-amber-400 {
+  color: #d97706 !important; /* Amber 600 - rich and visible on white */
+}
+
+html.light .text-emerald-400,
+html:not(.dark) .text-emerald-400 {
+  color: #059669 !important; /* Emerald 600 */
+}
+
+html.light .text-purple-400,
+html:not(.dark) .text-purple-400 {
+  color: #7c3aed !important; /* Violet 600 */
+}
+
+html.light .text-sky-400,
+html:not(.dark) .text-sky-400 {
+  color: #0284c7 !important; /* Sky 600 */
+}
+
+/* High contrast primary buttons in light mode */
+html.light .bg-white.text-zinc-950,
+html:not(.dark) .bg-white.text-zinc-950,
+html.light .bg-white.text-black,
+html:not(.dark) .bg-white.text-black {
+  background-color: #18181b !important;
+  color: #ffffff !important;
+}
+
+html.light .bg-white.text-zinc-950:hover,
+html:not(.dark) .bg-white.text-zinc-950:hover,
+html.light .bg-white.text-black:hover,
+html:not(.dark) .bg-white.text-black:hover {
+  background-color: #27272a !important;
+}
+
+/* Inputs and textareas in light mode */
+html.light input,
+html:not(.dark) input,
+html.light textarea,
+html:not(.dark) textarea {
+  color: #09090b !important;
+}
+
+html.light input::placeholder,
+html:not(.dark) input::placeholder,
+html.light textarea::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #71717a !important;
+}
+
+/* Dialogs, Popovers, Context Menus in light mode */
+html.light .bg-zinc-900.border-zinc-800,
+html:not(.dark) .bg-zinc-900.border-zinc-800,
+html.light [data-radix-popper-content-wrapper] [class*="bg-zinc-900"],
+html:not(.dark) [data-radix-popper-content-wrapper] [class*="bg-zinc-900"] {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+  color: #09090b !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Scrollbars in light mode */
+html.light ::-webkit-scrollbar-thumb,
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #d4d4d8 !important;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover,
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa !important;
+}
+
+/* Advance Query Execution Indeterminate Shimmer */
+@keyframes indeterminate-slide {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(50%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-indeterminate {
+  animation: indeterminate-slide 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+
