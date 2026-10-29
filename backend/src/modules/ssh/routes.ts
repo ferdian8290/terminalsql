@@ -53,13 +53,48 @@ export async function sshRoutes(app: FastifyInstance) {
       return;
     }
 
-    // Validate Origin header (prevent CSWSH)
+    // Validate Origin header (prevent CSWSH while allowing same host, private LAN IPs, and allowed origins)
     const origin = request.headers.origin;
     const hostHeader = request.headers.host;
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5176,http://localhost:5175,http://localhost:3002').split(',');
-    const isSameHost = origin && hostHeader && (origin === `http://${hostHeader}` || origin === `https://${hostHeader}`);
-    if (origin && !isSameHost && !allowedOrigins.includes(origin)) {
-      socket.send(JSON.stringify({ type: 'error', message: 'Forbidden origin' }));
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+
+    let isAllowed = false;
+    if (!origin) {
+      isAllowed = true; // Direct / same-origin request
+    } else {
+      try {
+        const originUrl = new URL(origin);
+        const originHostname = originUrl.hostname;
+        const hostHostname = hostHeader ? hostHeader.split(':')[0] : '';
+
+        // 1. Same host match (comparing hostnames regardless of reverse-proxy port mapping)
+        if (hostHostname && originHostname === hostHostname) {
+          isAllowed = true;
+        }
+
+        // 2. Explicit allowedOrigins match
+        if (!isAllowed && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+          isAllowed = true;
+        }
+
+        // 3. Localhost and private LAN IP ranges (RFC 1918)
+        if (
+          !isAllowed &&
+          (originHostname === 'localhost' ||
+            originHostname === '127.0.0.1' ||
+            originHostname.startsWith('10.') ||
+            originHostname.startsWith('192.168.') ||
+            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(originHostname))
+        ) {
+          isAllowed = true;
+        }
+      } catch {
+        isAllowed = false;
+      }
+    }
+
+    if (!isAllowed) {
+      socket.send(JSON.stringify({ type: 'error', message: `Forbidden origin: ${origin}` }));
       socket.close(4003, 'Forbidden');
       return;
     }

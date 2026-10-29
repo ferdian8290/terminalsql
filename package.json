@@ -1,6 +1,6 @@
 {
   "name": "terminalsql",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "TerminalSQL — Web-based SSH, DB Query Editor, and SFTP File Manager",
   "scripts": {
     "dev:backend": "cd backend && npm run dev",
