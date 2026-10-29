@@ -35,6 +35,7 @@ export function AppShell() {
     setTheme,
     draggingTabId,
     setDraggingTabId,
+    tabStatuses,
   } = useAppStore();
 
   const navigate = useNavigate();
@@ -163,7 +164,7 @@ export function AppShell() {
     toast.success('Logged out');
   }
 
-  const activeSessions = tabs.filter((t) => t.type === 'ssh').length;
+  const activeSessions = tabs.filter((t) => t.type === 'ssh' && tabStatuses[t.id] === 'connected').length;
 
   const renderTabContent = (tab: Tab) => {
     switch (tab.type) {

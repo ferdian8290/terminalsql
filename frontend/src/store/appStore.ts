@@ -59,6 +59,9 @@ interface AppState {
   setSplitMode: (mode: 'single' | 'split-horizontal' | 'split-vertical', tabId?: string) => void;
   setSplitTabId: (id: string | null) => void;
 
+  tabStatuses: Record<string, 'connected' | 'connecting' | 'disconnected'>;
+  setTabStatus: (tabId: string, status: 'connected' | 'connecting' | 'disconnected') => void;
+
   draggingTabId: string | null;
   setDraggingTabId: (id: string | null) => void;
 
@@ -151,6 +154,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   splitMode: 'single',
   splitTabId: null,
 
+  tabStatuses: {},
+  setTabStatus: (tabId, status) => {
+    set((state) => {
+      if (state.tabStatuses[tabId] === status) return state;
+      return {
+        tabStatuses: {
+          ...state.tabStatuses,
+          [tabId]: status,
+        },
+      };
+    });
+  },
+
   openTab: (tabData) => {
     const id = `${tabData.connectionId}-${tabData.type}-${Date.now()}`;
     const tab: Tab = { id, ...tabData };
@@ -187,7 +203,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       window.dispatchEvent(new CustomEvent('terminalsql:tab-closed', { detail: { tabId: id } }));
     }
 
-    set({ tabs: newTabs, activeTabId: newActiveId, splitTabId: newSplitId, splitMode: newSplitMode });
+    const newStatuses = { ...get().tabStatuses };
+    delete newStatuses[id];
+
+    set({ tabs: newTabs, activeTabId: newActiveId, splitTabId: newSplitId, splitMode: newSplitMode, tabStatuses: newStatuses });
     try {
       localStorage.setItem('terminalsql_saved_tabs', JSON.stringify(newTabs));
       if (newActiveId) localStorage.setItem('terminalsql_active_tab', newActiveId);
@@ -251,11 +270,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
 
     const remaining = tabs.filter((t) => t.id === id);
+    const newStatuses: Record<string, 'connected' | 'connecting' | 'disconnected'> = {};
+    if (get().tabStatuses[id]) {
+      newStatuses[id] = get().tabStatuses[id];
+    }
+
     set({
       tabs: remaining,
       activeTabId: id,
       splitMode: 'single',
       splitTabId: null,
+      tabStatuses: newStatuses,
     });
     try {
       localStorage.setItem('terminalsql_saved_tabs', JSON.stringify(remaining));
@@ -276,6 +301,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeTabId: null,
       splitMode: 'single',
       splitTabId: null,
+      tabStatuses: {},
     });
     try {
       localStorage.removeItem('terminalsql_saved_tabs');

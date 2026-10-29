@@ -57,7 +57,7 @@ interface CanvasContextMenuState {
 import { getDatabaseBrandIcon as getDatabaseIcon } from '@/components/common/DatabaseBrandIcons';
 
 export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse, width }: Props) {
-  const { connections, removeConnection, addConnection, updateConnection, setConnections, openTab, tabs, setActiveTab, closeTab, activeTabId } = useAppStore();
+  const { connections, removeConnection, addConnection, updateConnection, setConnections, openTab, tabs, setActiveTab, closeTab, activeTabId, tabStatuses } = useAppStore();
   const [search, setSearch] = useState('');
   const [showImportExport, setShowImportExport] = useState(false);
 
@@ -510,7 +510,12 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
     const isDb = conn.type === 'database';
     const isSsh = conn.type === 'ssh';
     const isSelected = selectedConnId === conn.id;
-    const isConnected = tabs.some((t) => t.connectionId === conn.id);
+    const hasTab = tabs.some((t) => t.connectionId === conn.id);
+    const isConnected = isSsh
+      ? tabs.some((t) => t.connectionId === conn.id && tabStatuses[t.id] === 'connected')
+      : isDb
+        ? hasTab
+        : tabs.some((t) => t.connectionId === conn.id && tabStatuses[t.id] === 'connected');
     const isTreeExpanded = Boolean(expandedConnTree[conn.id]);
     const isDragging = draggingConnId === conn.id;
 
@@ -1591,7 +1596,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
               <span className="truncate font-semibold">{contextMenu.conn.name}</span>
             </div>
 
-            {tabs.some((t) => t.connectionId === contextMenu.conn.id) ? (
+            {tabs.some((t) => t.connectionId === contextMenu.conn.id && (contextMenu.conn.type !== 'ssh' || tabStatuses[t.id] === 'connected')) ? (
               <button
                 onClick={() => {
                   const c = contextMenu.conn;
@@ -1615,7 +1620,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-zinc-800 hover:text-white transition-colors text-left"
               >
                 <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
-                <span>Connect</span>
+                <span>{tabs.some((t) => t.connectionId === contextMenu.conn.id) ? 'Reconnect' : 'Connect'}</span>
               </button>
             )}
 

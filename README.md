@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.3.9-purple)
+![Version](https://img.shields.io/badge/Version-1.5.1-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -21,7 +21,7 @@ TerminalSQL brings the productivity and density of enterprise desktop clients di
 
 | Module | Capabilities |
 |--------|-------------|
-| 🖥️ **SSH Terminal** | xterm.js v5 with WebGL acceleration, multi-tab session management, terminal resize, auto-reconnect, SSH Bastion / Jump Host tunneling, **2-minute detached session grace period** (connection survives accidental refresh/disconnect), **Terminal Session Log Downloader** (`.log` format), and **Mobile Virtual Touch Keypad** (`Esc`, `Tab`, `Ctrl`, `Alt`, Arrow keys). |
+| 🖥️ **SSH Terminal** | xterm.js v5 with WebGL acceleration, multi-tab session management, terminal resize, auto-reconnect, SSH Bastion / Jump Host tunneling, **HTTP Streaming Tunnel Fallback** (bypasses corporate proxies / firewalls blocking WebSocket code 1006), **Live Active Status Dot** (sidebar & header indicator reflects real live socket state, automatically clearing on disconnect), **2-minute detached session grace period**, **Terminal Session Log Downloader**, and **Mobile Virtual Touch Keypad**. |
 | 🪟 **Zero-Reconnect Split Screen** | Drag-and-drop tab splitting (`Split Down` & `Split Right`) with visual drop zone suggestions. Sessions and WebSockets persist seamlessly across layout splits without disconnecting. |
 | 🗄️ **Database Engine** | Native drivers for **ClickHouse**, **PostgreSQL**, **MySQL**, and **SQLite**. Monaco Editor SQL execution, clean query text, backend limit injection (respects user-defined LIMIT, with defaults 100, 200, 500, 1000, Unlimited), automatic connection pool lifecycle management, **SQL Editor Draft Auto-Save** (persists query across page reloads), and **SQL Script Templates & Snippets Library** (SQLite server-backed CRUD). |
 | ⌨️ **Monaco `Ctrl+Enter` Execution** | Press `Ctrl+Enter` (or `Cmd+Enter`) inside Monaco Editor or anywhere in the tab to instantly execute the highlighted SQL selection, or the entire statement if unselected. |

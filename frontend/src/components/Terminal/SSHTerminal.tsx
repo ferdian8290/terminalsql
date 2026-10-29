@@ -120,6 +120,7 @@ export function disposeTerminalSession(tabId: string) {
     } catch { }
     sessionRegistry.delete(tabId);
   }
+  useAppStore.getState().setTabStatus(tabId, 'disconnected');
 }
 
 interface Props { tab: Tab; }
@@ -127,6 +128,7 @@ interface Props { tab: Tab; }
 export function SSHTerminal({ tab }: Props) {
   const openTab = useAppStore((s) => s.openTab);
   const appTheme = useAppStore((s) => s.theme);
+  const setTabStatus = useAppStore((s) => s.setTabStatus);
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -273,6 +275,7 @@ export function SSHTerminal({ tab }: Props) {
     if (!session || forceNew || isClosed) {
       setIsConnecting(true);
       setIsConnected(false);
+      setTabStatus(tab.id, 'connecting');
 
       if (session) {
         try {
@@ -358,12 +361,17 @@ export function SSHTerminal({ tab }: Props) {
                 session!.isConnected = true;
                 setIsConnecting(false);
                 setIsConnected(true);
+                setTabStatus(tab.id, 'connected');
                 term.writeln(`\r\n\x1b[32m✔ ${msg.message}\x1b[0m\r\n`);
                 sendTerminalResize(session!, term.cols, term.rows);
               } else if (msg.type === 'status') {
                 term.writeln(`\r\n\x1b[33m● ${msg.message}\x1b[0m\r\n`);
               } else if (msg.type === 'error') {
                 term.writeln(`\r\n\x1b[31m✗ ${msg.message}\x1b[0m\r\n`);
+                session!.isConnected = false;
+                setIsConnecting(false);
+                setIsConnected(false);
+                setTabStatus(tab.id, 'disconnected');
               }
             } catch {
               term.write(event.data);
@@ -371,13 +379,19 @@ export function SSHTerminal({ tab }: Props) {
           };
 
           es.onerror = () => {
-            // EventSource handles retries automatically
+            if (es.readyState === EventSource.CLOSED) {
+              if (session) session.isConnected = false;
+              setIsConnecting(false);
+              setIsConnected(false);
+              setTabStatus(tab.id, 'disconnected');
+            }
           };
 
           sendTerminalResize(session!, term.cols, term.rows);
         } catch (err: any) {
           setIsConnecting(false);
           setIsConnected(false);
+          setTabStatus(tab.id, 'disconnected');
           term.writeln(`\r\n\x1b[31m✗ HTTP Tunnel Error: ${err.message}\x1b[0m\r\n`);
         }
       };
@@ -399,6 +413,7 @@ export function SSHTerminal({ tab }: Props) {
         setTransport('ws');
         setIsConnecting(false);
         setIsConnected(true);
+        setTabStatus(tab.id, 'connected');
         term.writeln('\r\n\x1b[32m● SSH: Connected. Authenticating...\x1b[0m\r\n');
         sendTerminalResize(session!, term.cols, term.rows);
       };
@@ -409,6 +424,10 @@ export function SSHTerminal({ tab }: Props) {
           if (msg.type === 'data') {
             term.write(msg.data);
           } else if (msg.type === 'connected') {
+            session!.isConnected = true;
+            setIsConnecting(false);
+            setIsConnected(true);
+            setTabStatus(tab.id, 'connected');
             term.writeln(`\r\n\x1b[32m✔ ${msg.message}\x1b[0m\r\n`);
           } else if (msg.type === 'error') {
             term.writeln(`\r\n\x1b[31m✗ ${msg.message}\x1b[0m\r\n`);
@@ -435,6 +454,7 @@ export function SSHTerminal({ tab }: Props) {
         session!.isConnected = false;
         setIsConnecting(false);
         setIsConnected(false);
+        setTabStatus(tab.id, 'disconnected');
         term.writeln(`\r\n\x1b[33m● Session closed (${event.reason || 'code ' + event.code})\x1b[0m\r\n`);
       };
 
@@ -448,6 +468,7 @@ export function SSHTerminal({ tab }: Props) {
         session!.isConnected = false;
         setIsConnecting(false);
         setIsConnected(false);
+        setTabStatus(tab.id, 'disconnected');
       };
 
       term.onData((data) => {
@@ -476,6 +497,7 @@ export function SSHTerminal({ tab }: Props) {
     setIsConnected(session.isConnected);
     setTermSize(session.termSize);
     setTransport(session.transport);
+    setTabStatus(tab.id, session.isConnected ? 'connected' : isConnecting ? 'connecting' : 'disconnected');
 
     // Mount container into termRef.current DOM node
     if (termRef.current) {
@@ -589,7 +611,9 @@ export function SSHTerminal({ tab }: Props) {
       }
       sess.isConnected = false;
     }
+    setIsConnecting(false);
     setIsConnected(false);
+    setTabStatus(tab.id, 'disconnected');
     xtermRef.current?.writeln('\r\n\x1b[33m⚠ Disconnected by user\x1b[0m\r\n');
   }
 
