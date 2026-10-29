@@ -112,7 +112,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateConnection: (conn) => set((s) => ({
     connections: s.connections.map((c) => (c.id === conn.id ? { ...c, ...conn } : c)),
   })),
-  removeConnection: (id) => set((s) => ({ connections: s.connections.filter((c) => c.id !== id) })),
+  removeConnection: (id) => set((s) => {
+    const remainingTabs = s.tabs.filter((t) => t.connectionId !== id);
+    const newActive = s.activeTabId && remainingTabs.some((t) => t.id === s.activeTabId)
+      ? s.activeTabId
+      : remainingTabs[0]?.id || null;
+    try {
+      localStorage.setItem('terminalsql_saved_tabs', JSON.stringify(remainingTabs));
+      if (newActive) localStorage.setItem('terminalsql_active_tab', newActive);
+      else localStorage.removeItem('terminalsql_active_tab');
+      localStorage.removeItem(`terminalsql_sqldraft_${id}`);
+    } catch {}
+    return {
+      connections: s.connections.filter((c) => c.id !== id),
+      tabs: remainingTabs,
+      activeTabId: newActive,
+    };
+  }),
 
   tabs: (() => {
     try {

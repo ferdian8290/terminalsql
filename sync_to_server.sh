@@ -108,9 +108,10 @@ else
   ssh -o BatchMode=yes "$REMOTE_HOST" bash << 'EOF'
 set -euo pipefail
 cd /root/dashboard/terminalsql/backend
+NPM_BIN="$(command -v npm || which npm || echo '/usr/local/bin/npm')"
 if [ ! -d "node_modules" ] || [ ! -f "node_modules/better-sqlite3/build/Release/better_sqlite3.node" ]; then
-  /usr/local/bin/npm install --omit=dev --legacy-peer-deps --no-audit --no-fund
-  /usr/local/bin/npm rebuild better-sqlite3
+  $NPM_BIN install --omit=dev --legacy-peer-deps --no-audit --no-fund
+  $NPM_BIN rebuild better-sqlite3
 fi
 EOF
 

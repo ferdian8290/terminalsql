@@ -33,7 +33,7 @@ if [ ! -f .env.local ]; then
   JWT_SECRET=$(openssl rand -base64 48)
   ENC_KEY=$(openssl rand -base64 32 | head -c 32)
   FRONTEND_PORT=${FRONTEND_PORT:-5175}
-  BACKEND_PORT=${PORT:-3002}
+  BACKEND_PORT=${PORT:-5176}
   cat > .env.local << EOF
 JWT_SECRET=${JWT_SECRET}
 ENCRYPTION_KEY=${ENC_KEY}
@@ -45,7 +45,7 @@ EOF
 fi
 
 export $(grep -v '^#' .env.local | xargs -d '\n') 2>/dev/null || true
-BACKEND_PORT=${PORT:-3002}
+BACKEND_PORT=${PORT:-5176}
 FRONTEND_PORT=${FRONTEND_PORT:-5175}
 
 # 2. Free stale ports if needed
@@ -78,7 +78,7 @@ cleanup() {
   exit 0
 }
 
-trap cleanup SIGINT SIGTERM EXIT
+trap cleanup SIGINT SIGTERM
 
 # 4. Start Backend
 echo -e "${CYAN}🚀 Starting Backend on http://localhost:${BACKEND_PORT}...${NC}"

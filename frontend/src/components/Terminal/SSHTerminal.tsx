@@ -184,9 +184,10 @@ export function SSHTerminal({ tab }: Props) {
       term.loadAddon(search);
       term.open(container);
 
-      // WebSocket connection with persistent tabId
+      // WebSocket connection with persistent tabId (avoids query token leak if cookie exists)
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const token = localStorage.getItem('terminalsql_token');
+      const hasAuthCookie = typeof document !== 'undefined' && document.cookie.includes('auth_token=');
+      const token = !hasAuthCookie ? localStorage.getItem('terminalsql_token') : null;
       const wsUrl = `${proto}//${window.location.host}/api/ssh/connect/${tab.connectionId}?tabId=${encodeURIComponent(tab.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
       const ws = new WebSocket(wsUrl);
 

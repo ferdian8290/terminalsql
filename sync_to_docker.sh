@@ -132,7 +132,7 @@ services:
       - NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,*.local
       - no_proxy=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,*.local
     volumes:
-      - ./backend/data:/app/data
+      - ./backend/data:/app/data:z
     restart: unless-stopped
     networks:
       - terminalsql-net

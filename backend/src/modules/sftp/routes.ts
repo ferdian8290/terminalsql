@@ -5,20 +5,45 @@ import { getDb } from '../../db/index.js';
 import { connections } from '../../db/schema.js';
 import { authenticate } from '../../middleware/auth.js';
 import { decrypt } from '../../utils/crypto.js';
+import { resolveBastionConfig, createBastionClient, openForwardedStream } from '../../utils/bastion.js';
 import { pipeline } from 'stream/promises';
 
-async function getSftpClient(conn: any, creds: any): Promise<SftpClient> {
+interface SftpSessionHandle {
+  sftp: SftpClient;
+  bastionClient?: any;
+  cleanup: () => Promise<void>;
+}
+
+async function getSftpClient(conn: any, creds: any, userId?: string): Promise<SftpSessionHandle> {
   const sftp = new SftpClient();
+  let bastionClient: any;
+  let forwardedStream: any;
+
+  if (creds.useBastion && creds.bastion) {
+    const resolved = resolveBastionConfig(creds.bastion, userId);
+    if (resolved) {
+      bastionClient = await createBastionClient(resolved);
+      forwardedStream = await openForwardedStream(bastionClient, conn.host, conn.port || 22);
+    }
+  }
+
   await sftp.connect({
-    host: conn.host,
-    port: conn.port,
+    sock: forwardedStream || undefined,
+    host: forwardedStream ? undefined : conn.host,
+    port: forwardedStream ? undefined : conn.port,
     username: conn.username,
     password: creds.password,
     privateKey: creds.privateKey,
     passphrase: creds.passphrase,
     readyTimeout: 15000,
   });
-  return sftp;
+
+  const cleanup = async () => {
+    try { await sftp.end(); } catch {}
+    try { bastionClient?.end(); } catch {}
+  };
+
+  return { sftp, bastionClient, cleanup };
 }
 
 async function getVerifiedConnection(db: any, connectionId: string, userId: string) {
@@ -42,7 +67,7 @@ export async function sftpRoutes(app: FastifyInstance) {
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
     const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const sftp = await getSftpClient(conn, creds);
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
 
     try {
       let targetPath = (path || '').trim();
@@ -66,7 +91,7 @@ export async function sftpRoutes(app: FastifyInstance) {
       }));
       return reply.send({ files, path: targetPath });
     } finally {
-      await sftp.end();
+      await cleanup();
     }
   });
 
@@ -81,7 +106,7 @@ export async function sftpRoutes(app: FastifyInstance) {
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
     const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const sftp = await getSftpClient(conn, creds);
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
 
     try {
       const stat = await sftp.stat(path);
@@ -94,7 +119,7 @@ export async function sftpRoutes(app: FastifyInstance) {
       const readStream = sftp.createReadStream(path);
       await pipeline(readStream as any, reply.raw);
     } finally {
-      await sftp.end();
+      await cleanup();
     }
   });
 
@@ -109,7 +134,7 @@ export async function sftpRoutes(app: FastifyInstance) {
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
     const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const sftp = await getSftpClient(conn, creds);
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
 
     try {
       const data = await request.file();
@@ -122,7 +147,7 @@ export async function sftpRoutes(app: FastifyInstance) {
 
       return reply.send({ message: 'File uploaded successfully', path: remotePath });
     } finally {
-      await sftp.end();
+      await cleanup();
     }
   });
 
@@ -139,7 +164,7 @@ export async function sftpRoutes(app: FastifyInstance) {
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
     const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const sftp = await getSftpClient(conn, creds);
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
 
     try {
       if (type === 'directory') {
@@ -149,7 +174,7 @@ export async function sftpRoutes(app: FastifyInstance) {
       }
       return reply.send({ message: 'Deleted successfully' });
     } finally {
-      await sftp.end();
+      await cleanup();
     }
   });
 
@@ -162,13 +187,13 @@ export async function sftpRoutes(app: FastifyInstance) {
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
     const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const sftp = await getSftpClient(conn, creds);
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
 
     try {
       await sftp.mkdir(path, true);
       return reply.send({ message: 'Directory created' });
     } finally {
-      await sftp.end();
+      await cleanup();
     }
   });
 
@@ -185,13 +210,13 @@ export async function sftpRoutes(app: FastifyInstance) {
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
     const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const sftp = await getSftpClient(conn, creds);
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
 
     try {
       await sftp.rename(oldPath, newPath);
       return reply.send({ message: 'Renamed successfully' });
     } finally {
-      await sftp.end();
+      await cleanup();
     }
   });
 }

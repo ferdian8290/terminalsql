@@ -47,7 +47,8 @@ case "$ACTION" in
   rebuild)
     echo -e "${YELLOW}Rebuilding better-sqlite3 native binary...${NC}"
     cd "${PROJECT_DIR}/backend"
-    /usr/local/bin/npm rebuild better-sqlite3
+    NPM_BIN="$(command -v npm || which npm || echo '/usr/local/bin/npm')"
+    $NPM_BIN rebuild better-sqlite3
     systemctl restart "$SERVICE_NAME"
     echo -e "${GREEN}✓ Done.${NC}"
     ;;

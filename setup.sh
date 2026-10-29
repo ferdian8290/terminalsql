@@ -22,9 +22,9 @@ if [ ! -f .env.local ]; then
   cat > .env.local << EOF
 JWT_SECRET=${JWT_SECRET}
 ENCRYPTION_KEY=${ENC_KEY}
-PORT=3002
+PORT=5176
 FRONTEND_URL=http://localhost:5175
-ALLOWED_ORIGINS=http://localhost:5175,http://localhost:3002,http://localhost:3001
+ALLOWED_ORIGINS=http://localhost:5175,http://localhost:5176,http://localhost:3002
 EOF
   echo "✓ .env.local created with generated secrets"
 fi
