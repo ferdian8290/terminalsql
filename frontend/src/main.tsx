@@ -4,8 +4,26 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import App from './App.tsx'
 import './index.css'
+
+// Configure Monaco Environment Web Workers for Vite
+// Offloads tokenization, validation, and syntax parsing to background workers
+// eliminating main UI thread freezes and console fallback warnings
+(window as any).MonacoEnvironment = {
+  getWorker(_: any, label: string) {
+    if (label === 'json') return new jsonWorker();
+    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker();
+    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker();
+    if (label === 'typescript' || label === 'javascript') return new tsWorker();
+    return new editorWorker();
+  },
+};
 
 // Configure @monaco-editor/react to use locally bundled monaco-editor
 // This ensures 100% offline functionality and avoids CDN blocks / CSP restrictions

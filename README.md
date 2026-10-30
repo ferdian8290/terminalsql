@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.16-purple)
+![Version](https://img.shields.io/badge/Version-1.5.17-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,9 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.17] - 2026-10-30
+- **Dedicated Monaco Web Workers Integration**: Offloaded Monaco Editor tokenization, syntax parsing, and language diagnostics into separate Vite Web Workers (`editor.worker`, `json.worker`, `css.worker`, `html.worker`, `ts.worker`), completely eliminating console fallback warnings and UI thread freezing during SQL editing.
 
 ### [v1.5.16] - 2026-10-30
 - **Lazy Tab Remote Data Loading**: SFTP directory listings now load strictly on-demand when a tab is active. Inactive tabs no longer blast concurrent SSH/SFTP handshakes to remote hosts upon browser refresh, eliminating `ECONNRESET` connection flood rejections.
