@@ -989,18 +989,18 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading local directory listing...</p>
           </div>
         ) : (
-          <div className="w-full min-w-full inline-block align-top">
+          <div className="w-full min-w-full">
             <table
-              className="w-full caption-bottom text-sm border-collapse table-fixed select-none"
+              className="w-full min-w-full caption-bottom text-sm border-collapse select-none"
               style={{
-                minWidth: '450px',
+                minWidth: '100%',
                 width: localColWidths.name
                   ? `${(localColWidths.name || 200) + localColWidths.size + localColWidths.type + localColWidths.modified}px`
                   : '100%',
               }}
             >
               <colgroup>
-                <col style={localColWidths.name ? { width: `${localColWidths.name}px` } : undefined} />
+                <col className="w-auto" style={localColWidths.name ? { width: `${localColWidths.name}px` } : undefined} />
                 <col style={{ width: `${localColWidths.size}px` }} />
                 <col style={{ width: `${localColWidths.type}px` }} />
                 <col style={{ width: `${localColWidths.modified}px` }} />
@@ -1366,18 +1366,18 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading remote directory listing...</p>
           </div>
         ) : (
-          <div className="w-full min-w-full inline-block align-top">
+          <div className="w-full min-w-full">
             <table
-              className="w-full caption-bottom text-sm border-collapse table-fixed select-none"
+              className="w-full min-w-full caption-bottom text-sm border-collapse select-none"
               style={{
-                minWidth: '550px',
+                minWidth: '100%',
                 width: remoteColWidths.name
                   ? `${(remoteColWidths.name || 200) + remoteColWidths.size + remoteColWidths.type + remoteColWidths.modified + remoteColWidths.perm}px`
                   : '100%',
               }}
             >
               <colgroup>
-                <col style={remoteColWidths.name ? { width: `${remoteColWidths.name}px` } : undefined} />
+                <col className="w-auto" style={remoteColWidths.name ? { width: `${remoteColWidths.name}px` } : undefined} />
                 <col style={{ width: `${remoteColWidths.size}px` }} />
                 <col style={{ width: `${remoteColWidths.type}px` }} />
                 <col style={{ width: `${remoteColWidths.modified}px` }} />

@@ -1,10 +1,28 @@
 # TerminalSQL — Docker & Docker Compose Deployment Guide
 
-Panduan lengkap deployment TerminalSQL menggunakan Docker & Docker Compose dengan penyimpanan data persisten (*zero data loss*).
+Panduan lengkap deployment TerminalSQL menggunakan Docker & Docker Compose dengan penyimpanan data persisten (*zero data loss*) dan isolasi penuh dari instalasi native systemd.
 
 ---
 
-## 1. Arsitektur Penyimpanan Data (*Persistent Storage*)
+## 1. Koeksistensi Harmonis: Native vs Container (Zero-Conflict Guarantee)
+
+TerminalSQL dirancang agar dapat berjalan secara **Native** (systemd / Node.js) dan **Container** (Docker Compose) pada mesin yang sama tanpa saling mengganggu:
+
+| Aspek | Native Mode (Systemd / Node) | Container Mode (Docker Compose) |
+|---|---|---|
+| **Port Frontend** | `5176` (atau `5175` dev) | `5175` (atau dikustomisasi via `.env.local`) |
+| **Port Backend API** | `5176` (unified port) | `3002` (internal network bridge) |
+| **Lokasi Database** | `./backend/data/terminalsql.db` | `./backend/data:/app/data:z` (volume share) |
+| **Data Synchronization** | Terbaca langsung oleh SQLite | Terbaca langsung oleh SQLite via host mount |
+| **Lifecycle Service** | `systemctl restart terminalsql-backend` | `docker compose up -d` / `./sync_to_docker.sh` |
+
+> [!TIP]
+> **Zero Data Loss & Zero Divergence:**
+> Karena kedua mode mengarah ke host path yang sama (`./backend/data/terminalsql.db`), setiap koneksi baru, bookmark query, atau template SQL yang Anda buat di instalasi Native akan otomatis langsung tersedia di Docker, begitu pula sebaliknya!
+
+---
+
+## 2. Arsitektur Penyimpanan Data (*Persistent Storage*)
 
 Semua akun pengguna, koneksi database (ClickHouse, PostgreSQL, MySQL, SQLite), session SSH, query templates, dan history tersimpan di database SQLite:
 

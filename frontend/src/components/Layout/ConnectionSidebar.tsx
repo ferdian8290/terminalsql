@@ -283,7 +283,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
   const sshConns = useMemo(() => filtered.filter((c) => c.type === 'ssh'), [filtered]);
   const dbConns = useMemo(() => filtered.filter((c) => c.type === 'database'), [filtered]);
   const sftpConns = useMemo(
-    () => filtered.filter((c) => c.type === 'sftp' || c.type === 'ssh'),
+    () => filtered.filter((c) => c.type === 'sftp'),
     [filtered]
   );
 

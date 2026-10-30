@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.17-purple)
+![Version](https://img.shields.io/badge/Version-1.5.18-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,11 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.18] - 2026-10-30
+- **True 100% Full-Width Explorer Table**: Fixed intrinsic shrink-to-fit container constraints (`inline-block` replaced by `w-full min-w-full block`), ensuring the remote and local file explorer table stretches completely to the right edge of any screen resolution without truncation or blank voids.
+- **De-Duplicated SSH & SFTP Sidebar Categories**: Separated SSH Terminal connections and standalone SFTP connections in the left navigation sidebar. SSH servers now live exclusively under the `Terminal` category (with on-demand right-click `Open SFTP Browser` action), eliminating redundant duplicate entries in the `SFTP` tab.
+- **Synchronized Offline Docker Image Archive**: Built and packaged `terminalsql-backend:latest` and `terminalsql-frontend:latest` into `./docker-images/terminalsql-images.tar.gz` (153MB) with updated image hashes, fully prepared for air-gapped on-premise container deployment alongside the native systemd stack.
 
 ### [v1.5.17] - 2026-10-30
 - **Dedicated Monaco Web Workers Integration**: Offloaded Monaco Editor tokenization, syntax parsing, and language diagnostics into separate Vite Web Workers (`editor.worker`, `json.worker`, `css.worker`, `html.worker`, `ts.worker`), completely eliminating console fallback warnings and UI thread freezing during SQL editing.
