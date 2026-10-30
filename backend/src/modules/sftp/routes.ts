@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { and, eq } from 'drizzle-orm';
 import SftpClient from 'ssh2-sftp-client';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { getDb } from '../../db/index.js';
 import { connections } from '../../db/schema.js';
 import { authenticate } from '../../middleware/auth.js';
@@ -348,4 +351,201 @@ export async function sftpRoutes(app: FastifyInstance) {
       await cleanup();
     }
   });
+
+  // GET /api/sftp/local-list?path=
+  // Lists real directory contents of the host local filesystem
+  app.get('/local-list', async (request, reply) => {
+    const { path: queryPath } = request.query as { path?: string };
+    let resolvedPath = (queryPath || '').trim();
+    if (!resolvedPath || resolvedPath === '~') {
+      resolvedPath = os.homedir();
+    } else {
+      resolvedPath = path.resolve(resolvedPath);
+    }
+
+    try {
+      if (!fs.existsSync(resolvedPath)) {
+        return reply.status(404).send({ error: `Directory not found: ${resolvedPath}` });
+      }
+
+      const stat = await fs.promises.stat(resolvedPath);
+      if (!stat.isDirectory()) {
+        resolvedPath = path.dirname(resolvedPath);
+      }
+
+      const dirents = await fs.promises.readdir(resolvedPath, { withFileTypes: true });
+      let totalBytes = 0;
+      let fileCount = 0;
+      let dirCount = 0;
+
+      const items = await Promise.all(
+        dirents.map(async (d) => {
+          const itemPath = path.join(resolvedPath, d.name);
+          try {
+            const itemStat = await fs.promises.stat(itemPath);
+            const isDir = d.isDirectory();
+            if (isDir) {
+              dirCount++;
+            } else {
+              fileCount++;
+              totalBytes += itemStat.size;
+            }
+            return {
+              name: d.name,
+              path: itemPath,
+              type: (isDir ? 'directory' : 'file') as 'directory' | 'file',
+              size: itemStat.size,
+              modifiedAt: Math.floor(itemStat.mtimeMs / 1000),
+              permissions: (itemStat.mode & parseInt('777', 8)).toString(8),
+              filetype: getLocalFileTypeDescription(d.name, isDir),
+            };
+          } catch {
+            const isDir = d.isDirectory();
+            if (isDir) dirCount++; else fileCount++;
+            return {
+              name: d.name,
+              path: itemPath,
+              type: (isDir ? 'directory' : 'file') as 'directory' | 'file',
+              size: 0,
+              modifiedAt: 0,
+              permissions: '000',
+              filetype: getLocalFileTypeDescription(d.name, isDir),
+            };
+          }
+        })
+      );
+
+      // Sort directories first (alphabetical), then files (alphabetical)
+      items.sort((a, b) => {
+        if (a.type === b.type) {
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        }
+        return a.type === 'directory' ? -1 : 1;
+      });
+
+      const parentPath = path.dirname(resolvedPath);
+
+      return reply.send({
+        path: resolvedPath,
+        parentPath: parentPath !== resolvedPath ? parentPath : null,
+        files: items,
+        stats: {
+          fileCount,
+          dirCount,
+          totalBytes,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to read local directory: ${err.message}` });
+    }
+  });
+
+  // POST /api/sftp/upload-local-file
+  // Uploads a file from host local filesystem directly to remote SFTP
+  app.post('/upload-local-file', async (request, reply) => {
+    const db = getDb();
+    const { connectionId, localPath, remotePath } = request.body as {
+      connectionId: string;
+      localPath: string;
+      remotePath: string;
+    };
+
+    if (!localPath || !remotePath) {
+      return reply.status(400).send({ error: 'localPath and remotePath are required' });
+    }
+
+    const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
+    if (!conn) return reply.status(404).send({ error: 'Connection not found' });
+
+    if (!fs.existsSync(localPath)) {
+      return reply.status(404).send({ error: `Local file not found: ${localPath}` });
+    }
+
+    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+
+    try {
+      const readStream = fs.createReadStream(localPath);
+      await sftp.put(readStream, remotePath);
+      return reply.send({ success: true, message: `Uploaded ${path.basename(localPath)} to ${remotePath}` });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to upload local file: ${err.message}` });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // POST /api/sftp/download-to-local
+  // Downloads a file from remote SFTP directly to host local directory
+  app.post('/download-to-local', async (request, reply) => {
+    const db = getDb();
+    const { connectionId, remotePath, localDir } = request.body as {
+      connectionId: string;
+      remotePath: string;
+      localDir: string;
+    };
+
+    if (!remotePath || !localDir) {
+      return reply.status(400).send({ error: 'remotePath and localDir are required' });
+    }
+
+    const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
+    if (!conn) return reply.status(404).send({ error: 'Connection not found' });
+
+    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+
+    try {
+      if (!fs.existsSync(localDir)) {
+        await fs.promises.mkdir(localDir, { recursive: true });
+      }
+
+      const filename = path.basename(remotePath);
+      const targetLocalFile = path.join(localDir, filename);
+      const writeStream = fs.createWriteStream(targetLocalFile);
+      const readStream = sftp.createReadStream(remotePath);
+      await pipeline(readStream, writeStream);
+      return reply.send({ success: true, localPath: targetLocalFile, filename });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to download file to local: ${err.message}` });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // POST /api/sftp/local-mkdir
+  app.post('/local-mkdir', async (request, reply) => {
+    const { path: dirPath } = request.body as { path: string };
+    if (!dirPath) return reply.status(400).send({ error: 'Directory path is required' });
+    try {
+      await fs.promises.mkdir(path.resolve(dirPath), { recursive: true });
+      return reply.send({ success: true, path: dirPath });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to create local directory: ${err.message}` });
+    }
+  });
+}
+
+function getLocalFileTypeDescription(name: string, isDirectory: boolean): string {
+  if (isDirectory) return 'File folder';
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) return 'GZipped TAR Archive';
+  if (lower.endsWith('.tar')) return 'TAR Archive';
+  if (lower.endsWith('.gz')) return 'GZIP Compressed Archive';
+  if (lower.endsWith('.zip')) return 'ZIP Archive';
+  if (lower.endsWith('.csv')) return 'Microsoft Excel CSV / Delimited';
+  if (lower.endsWith('.tsv')) return 'Tab Delimited File';
+  if (lower.endsWith('.json')) return 'JSON Source File';
+  if (lower.endsWith('.sql')) return 'SQL Query Script';
+  if (lower.endsWith('.log')) return 'Log File';
+  if (lower.endsWith('.txt')) return 'Text Document';
+  if (lower.endsWith('.sh') || lower.endsWith('.bash')) return 'Shell Script';
+  if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'Image File';
+  if (lower.endsWith('.pdf')) return 'PDF Document';
+  if (lower.endsWith('.conf') || lower.endsWith('.cfg') || lower.endsWith('.ini')) return 'Configuration File';
+  if (lower.endsWith('.env')) return 'Environment Config';
+  if (lower.endsWith('.yml') || lower.endsWith('.yaml')) return 'YAML Document';
+  if (lower.endsWith('.xml')) return 'XML Document';
+  const ext = name.split('.').pop();
+  return ext ? `${ext.toUpperCase()} File` : 'File';
 }

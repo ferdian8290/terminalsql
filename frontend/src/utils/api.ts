@@ -139,5 +139,34 @@ export const api = {
           previewSnippet?: string;
         }>;
       }>(`/sftp/archive-list?connectionId=${connectionId}&path=${encodeURIComponent(path)}`),
+    localList: (path?: string) =>
+      request<{
+        path: string;
+        parentPath: string | null;
+        files: Array<{
+          name: string;
+          path: string;
+          type: 'file' | 'directory';
+          size: number;
+          modifiedAt: number;
+          permissions: string;
+          filetype: string;
+        }>;
+        stats: {
+          fileCount: number;
+          dirCount: number;
+          totalBytes: number;
+        };
+      }>(`/sftp/local-list${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+    uploadLocalFile: (data: { connectionId: string; localPath: string; remotePath: string }) =>
+      request<{ success: boolean; message: string }>('/sftp/upload-local-file', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    downloadToLocal: (data: { connectionId: string; remotePath: string; localDir: string }) =>
+      request<{ success: boolean; localPath: string; filename?: string }>('/sftp/download-to-local', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 };
