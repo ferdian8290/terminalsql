@@ -368,12 +368,28 @@ export async function sftpRoutes(app: FastifyInstance) {
   // Lists real directory contents of the host local filesystem
   app.get('/local-list', async (request, reply) => {
     const { path: queryPath } = request.query as { path?: string };
-    let resolvedPath = (queryPath || '').trim();
-    if (!resolvedPath || resolvedPath === '~') {
-      resolvedPath = os.homedir();
-    } else {
-      resolvedPath = path.resolve(resolvedPath);
+    let raw = (queryPath || '').trim();
+
+    // Helper to resolve paths, supporting Windows paths (C:\Users\...) inside WSL (/mnt/c/Users/...)
+    function resolveLocalPath(p: string): string {
+      if (!p || p === '~') {
+        // If in WSL and /mnt/c/Users/KAM-IPS3I-4 exists, default to Windows user profile
+        if (fs.existsSync('/mnt/c/Users/KAM-IPS3I-4')) {
+          return '/mnt/c/Users/KAM-IPS3I-4';
+        }
+        return os.homedir();
+      }
+      // Handle C:\ or C:/ Windows drive letter notation
+      if (/^[a-zA-Z]:[\\\/]/.test(p)) {
+        const drive = p[0].toLowerCase();
+        const sub = p.substring(2).replace(/\\/g, '/');
+        const mntPath = `/mnt/${drive}${sub.startsWith('/') ? sub : '/' + sub}`;
+        if (fs.existsSync(mntPath)) return mntPath;
+      }
+      return path.resolve(p);
     }
+
+    let resolvedPath = resolveLocalPath(raw);
 
     try {
       if (!fs.existsSync(resolvedPath)) {
@@ -437,9 +453,21 @@ export async function sftpRoutes(app: FastifyInstance) {
 
       const parentPath = path.dirname(resolvedPath);
 
+      // Pretty display path for Windows WSL users
+      function formatDisplayPath(p: string): string {
+        const mntMatch = p.match(/^\/mnt\/([a-zA-Z])(\/.*)?$/);
+        if (mntMatch) {
+          const drive = mntMatch[1].toUpperCase();
+          const rest = (mntMatch[2] || '').replace(/\//g, '\\');
+          return `${drive}:${rest || '\\'}`;
+        }
+        return p;
+      }
+
       return reply.send({
-        path: resolvedPath,
-        parentPath: parentPath !== resolvedPath ? parentPath : null,
+        path: formatDisplayPath(resolvedPath),
+        rawPath: resolvedPath,
+        parentPath: parentPath !== resolvedPath ? formatDisplayPath(parentPath) : null,
         files: items,
         stats: {
           fileCount,

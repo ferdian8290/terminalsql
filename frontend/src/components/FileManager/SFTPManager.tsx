@@ -9,7 +9,7 @@ import { api } from '@/utils/api';
 import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -799,48 +799,48 @@ export function SFTPManager({ tab }: Props) {
       </div>
 
       {/* Local File Table with Sticky Header & Resizable Columns */}
-      <div className="flex-1 overflow-auto flex flex-col relative">
+      <div className="flex-1 overflow-auto flex flex-col relative w-full">
         {loadingLocal ? (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 font-mono">
             <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
             <p className="text-xs">Reading local directory listing...</p>
           </div>
         ) : (
-          <div className="min-w-full inline-block align-middle">
-            <Table className="table-fixed w-full">
-              <TableHeader className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm">
-                <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead style={{ width: `${localColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+          <div className="w-max min-w-full">
+            <table className="caption-bottom text-sm border-collapse" style={{ width: `${Object.values(localColWidths).reduce((a, b) => a + b, 0)}px` }}>
+              <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
+                <tr className="border-zinc-800 hover:bg-transparent">
+                  <th style={{ width: `${localColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
                     <span>Filename</span>
                     <div
                       onMouseDown={(e) => startColResize('local', 'name', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${localColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                  </th>
+                  <th style={{ width: `${localColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
                     <span>Filesize</span>
                     <div
                       onMouseDown={(e) => startColResize('local', 'size', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${localColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+                  </th>
+                  <th style={{ width: `${localColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
                     <span>Filetype</span>
                     <div
                       onMouseDown={(e) => startColResize('local', 'type', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${localColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                  </th>
+                  <th style={{ width: `${localColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
                     <span>Last modified</span>
                     <div
                       onMouseDown={(e) => startColResize('local', 'modified', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="[&_tr:last-child]:border-0">
                 {/* Parent Directory row (FileZilla '..') */}
                 {localParentPath && (
                   <TableRow
@@ -902,8 +902,8 @@ export function SFTPManager({ tab }: Props) {
                     </TableRow>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -1033,7 +1033,7 @@ export function SFTPManager({ tab }: Props) {
             handleDirectUploadFiles(e.dataTransfer.files);
           }
         }}
-        className="relative flex-1 overflow-auto flex flex-col"
+        className="relative flex-1 overflow-auto flex flex-col w-full"
       >
         {isDraggingOverRemote && (
           <div className="absolute inset-0 z-30 bg-emerald-950/80 border-2 border-dashed border-emerald-400 flex flex-col items-center justify-center pointer-events-none backdrop-blur-xs animate-in fade-in">
@@ -1049,48 +1049,48 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading remote directory listing...</p>
           </div>
         ) : (
-          <div className="min-w-full inline-block align-middle">
-            <Table className="table-fixed w-full">
-              <TableHeader className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm">
-                <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead style={{ width: `${remoteColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+          <div className="w-max min-w-full">
+            <table className="caption-bottom text-sm border-collapse" style={{ width: `${Object.values(remoteColWidths).reduce((a, b) => a + b, 0)}px` }}>
+              <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
+                <tr className="border-zinc-800 hover:bg-transparent">
+                  <th style={{ width: `${remoteColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
                     <span>Filename</span>
                     <div
                       onMouseDown={(e) => startColResize('remote', 'name', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${remoteColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                  </th>
+                  <th style={{ width: `${remoteColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
                     <span>Filesize</span>
                     <div
                       onMouseDown={(e) => startColResize('remote', 'size', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${remoteColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+                  </th>
+                  <th style={{ width: `${remoteColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
                     <span>Filetype</span>
                     <div
                       onMouseDown={(e) => startColResize('remote', 'type', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${remoteColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                  </th>
+                  <th style={{ width: `${remoteColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
                     <span>Last modified</span>
                     <div
                       onMouseDown={(e) => startColResize('remote', 'modified', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                  <TableHead style={{ width: `${remoteColWidths.perm}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                  </th>
+                  <th style={{ width: `${remoteColWidths.perm}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
                     <span>Permissions</span>
                     <div
                       onMouseDown={(e) => startColResize('remote', 'perm', e)}
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
                     />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="[&_tr:last-child]:border-0">
                 {/* Parent Directory row (FileZilla '..') */}
                 {remotePath !== '/' && (
                   <TableRow
@@ -1156,8 +1156,8 @@ export function SFTPManager({ tab }: Props) {
                     </TableRow>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -1410,7 +1410,7 @@ export function SFTPManager({ tab }: Props) {
               {remoteContextMenu.item.name}
             </div>
 
-            {remoteContextMenu.item.type === 'file' && (
+            {remoteContextMenu.item.type === 'file' ? (
               <>
                 {canPreviewFile(remoteContextMenu.item.name) && (
                   <button
@@ -1448,6 +1448,31 @@ export function SFTPManager({ tab }: Props) {
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download to PC (Browser)</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setRemoteContextMenu(null);
+                    navigateRemote(remoteContextMenu.item);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Open Folder</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const name = remoteContextMenu.item.name;
+                    setRemoteContextMenu(null);
+                    handleDownloadToLocal(name);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Download to Local site</span>
                 </button>
               </>
             )}

@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.12-purple)
+![Version](https://img.shields.io/badge/Version-1.5.13-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,11 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.13] - 2026-10-30
+- **Auto-Resolve Windows User Profile in WSL**: Automatically mounted Windows user profile (`C:\Users\KAM-IPS3I-4`) as the default local root when running inside WSL, showing genuine PC files (`Downloads`, `Documents`, etc.) directly on `Local site`.
+- **Horizontal Scrolling & Overflow**: Implemented horizontal scrolling container (`overflow-auto`) with fixed column widths on both local and remote tables, enabling smooth horizontal panning and eliminating text clipping.
+- **Folder Context Menu Parity**: Added `Open Folder` and `Download to Local site` for directories in the remote file explorer.
 
 ### [v1.5.12] - 2026-10-30
 - **SFTP Sticky Headers & Resizable Table Columns**: Fixed headers on both local and remote tables so they stay pinned when scrolling vertically. Added interactive column divider drag handles on `Filename`, `Filesize`, `Filetype`, `Last modified`, and `Permissions`.
