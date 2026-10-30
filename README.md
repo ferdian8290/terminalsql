@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.6-purple)
+![Version](https://img.shields.io/badge/Version-1.5.7-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -291,6 +291,9 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.7] - 2026-10-30
+- **Resilient Multi-Key Credential Decryption**: Implemented multi-key fallback decryption in `backend/src/utils/crypto.ts`. If environment encryption keys differ across container or host migrations, credentials automatically fall back to known keys without throwing `Unsupported state or unable to authenticate data`.
 
 ### [v1.5.6] - 2026-10-30
 - **Action Button Precision Positioning**: Refined sidebar connect button spacing (`pr-1`), optically centered play icon (`ml-0.5`), and removed native HTML `title` attributes to eliminate conflicting horizontal browser tooltips.
