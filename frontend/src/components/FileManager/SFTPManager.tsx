@@ -200,19 +200,19 @@ export function SFTPManager({ tab }: Props) {
     }
   }
 
-  // Column widths (resizable)
-  const [localColWidths, setLocalColWidths] = useState<{ name: number; size: number; type: number; modified: number }>({
-    name: 240,
+  // Column widths (resizable, default null for filename means 100% flexible)
+  const [localColWidths, setLocalColWidths] = useState<{ name: number | null; size: number; type: number; modified: number }>({
+    name: null, // Flexible auto-width (takes all remaining table width)
     size: 90,
     type: 130,
-    modified: 150,
+    modified: 155,
   });
-  const [remoteColWidths, setRemoteColWidths] = useState<{ name: number; size: number; type: number; modified: number; perm: number }>({
-    name: 360,
-    size: 110,
-    type: 160,
-    modified: 180,
-    perm: 120,
+  const [remoteColWidths, setRemoteColWidths] = useState<{ name: number | null; size: number; type: number; modified: number; perm: number }>({
+    name: null, // Flexible auto-width (takes all remaining table width)
+    size: 90,
+    type: 130,
+    modified: 155,
+    perm: 105,
   });
 
   const resizingColRef = useRef<{
@@ -225,9 +225,14 @@ export function SFTPManager({ tab }: Props) {
   function startColResize(pane: 'local' | 'remote', col: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+
+    // Determine current rendered width of column header
+    const thElement = (e.currentTarget.parentElement as HTMLElement);
+    const renderedWidth = thElement ? Math.round(thElement.getBoundingClientRect().width) : 200;
+
     const startWidth = pane === 'local'
-      ? (localColWidths as any)[col]
-      : (remoteColWidths as any)[col];
+      ? ((localColWidths as any)[col] ?? renderedWidth)
+      : ((remoteColWidths as any)[col] ?? renderedWidth);
 
     resizingColRef.current = {
       pane,
@@ -246,8 +251,8 @@ export function SFTPManager({ tab }: Props) {
         return;
       }
       const diff = moveEvent.clientX - resizingColRef.current.startX;
-      const minW = col === 'size' || col === 'perm' ? 70 : 100;
-      const newWidth = Math.max(minW, resizingColRef.current.startWidth + diff);
+      const minW = col === 'size' || col === 'perm' ? 60 : 100;
+      const newWidth = Math.max(minW, Math.round(resizingColRef.current.startWidth + diff));
 
       if (resizingColRef.current.pane === 'local') {
         setLocalColWidths((prev) => ({ ...prev, [resizingColRef.current!.col]: newWidth }));
@@ -944,10 +949,18 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading local directory listing...</p>
           </div>
         ) : (
-          <div className="w-max min-w-full inline-block align-top">
-            <table className="caption-bottom text-sm border-collapse table-fixed select-none" style={{ width: `${Object.values(localColWidths).reduce((a, b) => a + b, 0)}px` }}>
+          <div className="w-full min-w-full inline-block align-top">
+            <table
+              className="w-full caption-bottom text-sm border-collapse table-fixed select-none"
+              style={{
+                minWidth: '450px',
+                width: localColWidths.name
+                  ? `${(localColWidths.name || 200) + localColWidths.size + localColWidths.type + localColWidths.modified}px`
+                  : '100%',
+              }}
+            >
               <colgroup>
-                <col style={{ width: `${localColWidths.name}px` }} />
+                <col style={localColWidths.name ? { width: `${localColWidths.name}px` } : undefined} />
                 <col style={{ width: `${localColWidths.size}px` }} />
                 <col style={{ width: `${localColWidths.type}px` }} />
                 <col style={{ width: `${localColWidths.modified}px` }} />
@@ -955,7 +968,7 @@ export function SFTPManager({ tab }: Props) {
               <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
                 <tr className="border-zinc-800 hover:bg-transparent">
                   <th
-                    style={{ width: `${localColWidths.name}px` }}
+                    style={localColWidths.name ? { width: `${localColWidths.name}px` } : undefined}
                     onClick={() => handleLocalSort('name')}
                     className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
                     title="Sort by Filename"
@@ -1313,10 +1326,18 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading remote directory listing...</p>
           </div>
         ) : (
-          <div className="w-max min-w-full inline-block align-top">
-            <table className="caption-bottom text-sm border-collapse table-fixed select-none" style={{ width: `${Object.values(remoteColWidths).reduce((a, b) => a + b, 0)}px` }}>
+          <div className="w-full min-w-full inline-block align-top">
+            <table
+              className="w-full caption-bottom text-sm border-collapse table-fixed select-none"
+              style={{
+                minWidth: '550px',
+                width: remoteColWidths.name
+                  ? `${(remoteColWidths.name || 200) + remoteColWidths.size + remoteColWidths.type + remoteColWidths.modified + remoteColWidths.perm}px`
+                  : '100%',
+              }}
+            >
               <colgroup>
-                <col style={{ width: `${remoteColWidths.name}px` }} />
+                <col style={remoteColWidths.name ? { width: `${remoteColWidths.name}px` } : undefined} />
                 <col style={{ width: `${remoteColWidths.size}px` }} />
                 <col style={{ width: `${remoteColWidths.type}px` }} />
                 <col style={{ width: `${remoteColWidths.modified}px` }} />
@@ -1325,7 +1346,7 @@ export function SFTPManager({ tab }: Props) {
               <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
                 <tr className="border-zinc-800 hover:bg-transparent">
                   <th
-                    style={{ width: `${remoteColWidths.name}px` }}
+                    style={remoteColWidths.name ? { width: `${remoteColWidths.name}px` } : undefined}
                     onClick={() => handleRemoteSort('name')}
                     className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
                     title="Sort by Filename"

@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.14-purple)
+![Version](https://img.shields.io/badge/Version-1.5.15-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,10 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.15] - 2026-10-30
+- **100% Flexible Auto Table Layout**: Eliminating hardcoded table width constraints by allowing the table to span 100% (`w-full`) of the workspace canvas. The primary `Filename` column flexibly absorbs all available screen width, completely preventing long filenames from being truncated or clipped.
+- **Dynamic Proportional Column Sizing**: Initialized explicit column widths for `Filesize`, `Filetype`, `Last modified`, and `Permissions` while keeping `Filename` auto-flexible, with seamless transition to fixed pixel widths upon dragging column borders.
 
 ### [v1.5.14] - 2026-10-30
 - **Optimal Single-Pane Explorer View (Default)**: Full-width remote file explorer layout maximizing screen space for `Filename`, `Filesize`, `Filetype`, `Last modified`, and `Permissions`, with a one-click toggle between `Single View` and classic FileZilla `Dual Pane` view.
