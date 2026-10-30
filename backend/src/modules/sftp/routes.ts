@@ -536,6 +536,83 @@ export async function sftpRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: `Failed to create local directory: ${err.message}` });
     }
   });
+
+  // GET /api/sftp/local-preview?path=&maxBytes=
+  // Reads local file content for live preview
+  app.get('/local-preview', async (request, reply) => {
+    const { path: filePath, maxBytes } = request.query as { path: string; maxBytes?: string };
+    if (!filePath) return reply.status(400).send({ error: 'Path is required' });
+    const resolvedPath = path.resolve(filePath);
+
+    try {
+      if (!fs.existsSync(resolvedPath)) {
+        return reply.status(404).send({ error: 'File not found' });
+      }
+
+      const stat = await fs.promises.stat(resolvedPath);
+      const filename = path.basename(resolvedPath);
+      const limitBytes = Math.min(parseInt(maxBytes || '', 10) || 2 * 1024 * 1024, 5 * 1024 * 1024);
+      const isGz = (filename.endsWith('.gz') || filename.endsWith('.tgz')) && !filename.endsWith('.tar.gz');
+
+      if (filename.endsWith('.gz')) {
+        const stream = fs.createReadStream(resolvedPath).pipe(zlib.createGunzip());
+        const { content, isTruncated, bytesRead } = await readStreamLimited(stream, limitBytes);
+        return reply.send({
+          name: filename,
+          path: resolvedPath,
+          size: bytesRead,
+          totalSize: stat.size,
+          content,
+          isTruncated,
+          isCompressed: true,
+        });
+      }
+
+      const stream = fs.createReadStream(resolvedPath);
+      const { content, isTruncated, bytesRead } = await readStreamLimited(stream, limitBytes);
+      return reply.send({
+        name: filename,
+        path: resolvedPath,
+        size: bytesRead,
+        totalSize: stat.size,
+        content,
+        isTruncated,
+        isCompressed: false,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to preview local file: ${err.message}` });
+    }
+  });
+
+  // POST /api/sftp/local-rename
+  app.post('/local-rename', async (request, reply) => {
+    const { oldPath, newPath } = request.body as { oldPath: string; newPath: string };
+    if (!oldPath || !newPath) return reply.status(400).send({ error: 'oldPath and newPath are required' });
+    try {
+      await fs.promises.rename(path.resolve(oldPath), path.resolve(newPath));
+      return reply.send({ success: true, message: 'Renamed successfully' });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to rename: ${err.message}` });
+    }
+  });
+
+  // DELETE /api/sftp/local-delete
+  app.delete('/local-delete', async (request, reply) => {
+    const { path: itemPath, type } = request.body as { path: string; type?: 'file' | 'directory' };
+    if (!itemPath) return reply.status(400).send({ error: 'Path is required' });
+    try {
+      const resolved = path.resolve(itemPath);
+      const stat = await fs.promises.stat(resolved);
+      if (stat.isDirectory()) {
+        await fs.promises.rm(resolved, { recursive: true, force: true });
+      } else {
+        await fs.promises.unlink(resolved);
+      }
+      return reply.send({ success: true, message: 'Deleted successfully' });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to delete: ${err.message}` });
+    }
+  });
 }
 
 function getLocalFileTypeDescription(name: string, isDirectory: boolean): string {

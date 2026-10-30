@@ -16,9 +16,10 @@ import toast from 'react-hot-toast';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  connectionId: string;
+  connectionId?: string;
   filePath: string;
   fileName: string;
+  isLocal?: boolean;
 }
 
 interface ArchiveEntry {
@@ -90,7 +91,7 @@ function getLanguageForFile(name: string): string {
   }
 }
 
-export function FilePreviewModal({ isOpen, onClose, connectionId, filePath, fileName }: Props) {
+export function FilePreviewModal({ isOpen, onClose, connectionId, filePath, fileName, isLocal }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,6 +139,7 @@ export function FilePreviewModal({ isOpen, onClose, connectionId, filePath, file
     setLoading(true);
     setError(null);
     try {
+      if (!connectionId) throw new Error('Remote archive inspection requires active connection');
       const res = await api.sftp.archiveList(connectionId, filePath);
       setArchiveEntries(res.entries || []);
       setFileDetails({
@@ -157,15 +159,27 @@ export function FilePreviewModal({ isOpen, onClose, connectionId, filePath, file
     setLoading(true);
     setError(null);
     try {
-      const res = await api.sftp.preview(connectionId, filePath, entry);
-      setContent(res.content);
-      setFileDetails({
-        size: res.size,
-        totalSize: res.totalSize,
-        isTruncated: res.isTruncated,
-        isCompressed: res.isCompressed,
-        isArchiveEntry: res.isArchiveEntry,
-      });
+      if (isLocal) {
+        const res = await api.sftp.localPreview(filePath);
+        setContent(res.content);
+        setFileDetails({
+          size: res.size,
+          totalSize: res.totalSize,
+          isTruncated: res.isTruncated,
+          isCompressed: res.isCompressed,
+          isArchiveEntry: false,
+        });
+      } else {
+        const res = await api.sftp.preview(connectionId!, filePath, entry);
+        setContent(res.content);
+        setFileDetails({
+          size: res.size,
+          totalSize: res.totalSize,
+          isTruncated: res.isTruncated,
+          isCompressed: res.isCompressed,
+          isArchiveEntry: res.isArchiveEntry,
+        });
+      }
       if (entry && (entry.endsWith('.csv') || entry.endsWith('.tsv'))) {
         setViewMode('table');
       } else if (!isCsv) {
@@ -211,7 +225,20 @@ export function FilePreviewModal({ isOpen, onClose, connectionId, filePath, file
   };
 
   const handleDownload = () => {
-    const downloadUrl = api.sftp.download(connectionId, filePath);
+    if (isLocal) {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Saved ${fileName}`);
+      return;
+    }
+    const downloadUrl = api.sftp.download(connectionId!, filePath);
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = fileName;

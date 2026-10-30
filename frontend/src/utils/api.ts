@@ -168,5 +168,30 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    localMkdir: (path: string) =>
+      request<{ success: boolean; path: string }>('/sftp/local-mkdir', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      }),
+    localPreview: (path: string, maxBytes?: number) =>
+      request<{
+        name: string;
+        path: string;
+        size: number;
+        totalSize: number;
+        content: string;
+        isTruncated: boolean;
+        isCompressed?: boolean;
+      }>(`/sftp/local-preview?path=${encodeURIComponent(path)}${maxBytes ? `&maxBytes=${maxBytes}` : ''}`),
+    localRename: (oldPath: string, newPath: string) =>
+      request<{ success: boolean; message: string }>('/sftp/local-rename', {
+        method: 'POST',
+        body: JSON.stringify({ oldPath, newPath }),
+      }),
+    localDelete: (path: string, type?: 'file' | 'directory') =>
+      request<{ success: boolean; message: string }>('/sftp/local-delete', {
+        method: 'DELETE',
+        body: JSON.stringify({ path, type }),
+      }),
   },
 };

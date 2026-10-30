@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.11-purple)
+![Version](https://img.shields.io/badge/Version-1.5.12-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,12 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.12] - 2026-10-30
+- **SFTP Sticky Headers & Resizable Table Columns**: Fixed headers on both local and remote tables so they stay pinned when scrolling vertically. Added interactive column divider drag handles on `Filename`, `Filesize`, `Filetype`, `Last modified`, and `Permissions`.
+- **Extended Live Preview File Types**: Added support for `.cfg`, `.conf`, `.ini`, `.env`, `.html`, `.css`, and `.bash` to the instant live preview inspector.
+- **Local Site Live Preview**: Enabled `Quick View / Preview` directly from the local filesystem pane without uploading to remote first.
+- **Complete Local Context Menu Actions**: Implemented `New Folder`, `Rename`, `Delete Local Item`, `Copy Local Path`, and `Upload to Server` for complete parity with remote actions.
 
 ### [v1.5.11] - 2026-10-30
 - **Fix SFTP Permissions Object React Error #31**: Corrected `permissions` rendering in `SFTPManager.tsx` and serialized `f.rights` in `backend/src/modules/sftp/routes.ts` so `{ user, group, other }` object is safely formatted into standard POSIX notation string (`rwxr-xr-x`), eliminating Minified React Error #31 crash.

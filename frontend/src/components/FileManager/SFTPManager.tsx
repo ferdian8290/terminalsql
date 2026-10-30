@@ -10,7 +10,6 @@ import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -100,10 +99,10 @@ function getFileType(name: string, isDir: boolean): string {
   if (lower.endsWith('.sql')) return 'SQL Query Script';
   if (lower.endsWith('.log')) return 'Log File';
   if (lower.endsWith('.txt')) return 'Text Document';
+  if (lower.endsWith('.cfg') || lower.endsWith('.conf') || lower.endsWith('.ini')) return 'Configuration File';
   if (lower.endsWith('.sh') || lower.endsWith('.bash')) return 'Shell Script';
   if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'Image File';
   if (lower.endsWith('.pdf')) return 'PDF Document';
-  if (lower.endsWith('.conf') || lower.endsWith('.cfg') || lower.endsWith('.ini')) return 'Configuration File';
   if (lower.endsWith('.env')) return 'Environment Config';
   if (lower.endsWith('.yml') || lower.endsWith('.yaml')) return 'YAML Document';
   if (lower.endsWith('.xml')) return 'XML Document';
@@ -156,9 +155,68 @@ export function SFTPManager({ tab }: Props) {
     isOpen: boolean;
     filePath: string;
     fileName: string;
-  }>({ isOpen: false, filePath: '', fileName: '' });
+    isLocal?: boolean;
+  }>({ isOpen: false, filePath: '', fileName: '', isLocal: false });
 
   const directUploadRef = useRef<HTMLInputElement>(null);
+
+  // Column widths (resizable)
+  const [localColWidths, setLocalColWidths] = useState<{ name: number; size: number; type: number; modified: number }>({
+    name: 240,
+    size: 100,
+    type: 140,
+    modified: 160,
+  });
+  const [remoteColWidths, setRemoteColWidths] = useState<{ name: number; size: number; type: number; modified: number; perm: number }>({
+    name: 240,
+    size: 100,
+    type: 140,
+    modified: 160,
+    perm: 100,
+  });
+
+  const resizingColRef = useRef<{
+    pane: 'local' | 'remote';
+    col: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  function startColResize(pane: 'local' | 'remote', col: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startWidth = pane === 'local'
+      ? (localColWidths as any)[col]
+      : (remoteColWidths as any)[col];
+
+    resizingColRef.current = {
+      pane,
+      col,
+      startX: e.clientX,
+      startWidth,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingColRef.current) return;
+      const diff = moveEvent.clientX - resizingColRef.current.startX;
+      const newWidth = Math.max(50, resizingColRef.current.startWidth + diff);
+
+      if (resizingColRef.current.pane === 'local') {
+        setLocalColWidths((prev) => ({ ...prev, [resizingColRef.current!.col]: newWidth }));
+      } else {
+        setRemoteColWidths((prev) => ({ ...prev, [resizingColRef.current!.col]: newWidth }));
+      }
+    };
+
+    const handleMouseUp = () => {
+      resizingColRef.current = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }
 
   function addLog(msg: string) {
     setLogs((prev) => [...prev.slice(-40), msg]);
@@ -264,13 +322,27 @@ export function SFTPManager({ tab }: Props) {
     const lower = name.toLowerCase();
     const previewExtensions = [
       '.csv', '.tsv', '.txt', '.log', '.json', '.sql', '.sh', '.bash',
-      '.env', '.conf', '.yaml', '.yml', '.xml', '.md', '.js', '.ts',
-      '.py', '.tar', '.tar.gz', '.tgz', '.gz'
+      '.env', '.conf', '.cfg', '.ini', '.yaml', '.yml', '.xml', '.md', '.js', '.ts',
+      '.py', '.tar', '.tar.gz', '.tgz', '.gz', '.html', '.htm', '.css'
     ];
     return previewExtensions.some((ext) => lower.endsWith(ext));
   }
 
-  function handlePreviewFile(fileName?: string) {
+  function handlePreviewFile(fileName?: string, isLocal = false) {
+    if (isLocal) {
+      const target = fileName || selectedLocal;
+      if (!target) return;
+      const file = localFiles.find((f) => f.name === target);
+      const fullPath = file?.path || (localPath === '/' ? `/${target}` : `${localPath}/${target}`);
+      setPreviewModal({
+        isOpen: true,
+        filePath: fullPath,
+        fileName: target,
+        isLocal: true,
+      });
+      return;
+    }
+
     const target = fileName || selectedRemote;
     if (!target) return;
     const fullPath = remotePath === '/' ? `/${target}` : `${remotePath}/${target}`;
@@ -278,6 +350,7 @@ export function SFTPManager({ tab }: Props) {
       isOpen: true,
       filePath: fullPath,
       fileName: target,
+      isLocal: false,
     });
   }
 
@@ -286,8 +359,9 @@ export function SFTPManager({ tab }: Props) {
     if (file.type === 'directory') {
       const target = file.path || `${localPath === '/' ? '' : localPath}/${file.name}`;
       loadLocalFiles(target);
+    } else if (canPreviewFile(file.name)) {
+      handlePreviewFile(file.name, true);
     } else {
-      // Double click local file -> upload to remote
       handleUploadLocalFile(file);
     }
   }
@@ -303,7 +377,7 @@ export function SFTPManager({ tab }: Props) {
       const newPath = remotePath === '/' ? `/${file.name}` : `${remotePath}/${file.name}`;
       setRemotePath(newPath);
     } else if (canPreviewFile(file.name)) {
-      handlePreviewFile(file.name);
+      handlePreviewFile(file.name, false);
     } else {
       handleDownloadFile(file.name);
     }
@@ -335,14 +409,12 @@ export function SFTPManager({ tab }: Props) {
 
     try {
       if (target.path) {
-        // Direct host file upload via backend stream
         await api.sftp.uploadLocalFile({
           connectionId: tab.connectionId,
           localPath: target.path,
           remotePath: fullRemoteTarget,
         });
       } else if (target.fileObj) {
-        // Browser file upload via multipart
         await api.sftp.upload(tab.connectionId, fullRemoteTarget, target.fileObj);
       } else {
         throw new Error('Local file reference not available');
@@ -456,7 +528,7 @@ export function SFTPManager({ tab }: Props) {
     addLog(`Status: File transfer started: get "${target}"`);
   }
 
-  // Pick folder from PC via HTML5 File System Access API (if user prefers browser client directory)
+  // Pick folder from PC via HTML5 File System Access API
   async function handlePickLocalBrowserFolder() {
     if ('showDirectoryPicker' in window) {
       try {
@@ -510,6 +582,48 @@ export function SFTPManager({ tab }: Props) {
       }
     } else {
       toast('Directory picker is supported in Chrome, Edge, and Opera browsers.', { icon: 'ℹ️' });
+    }
+  }
+
+  // Local Mkdir
+  async function handleMkdirLocal() {
+    const dirName = prompt('Enter new folder name:');
+    if (!dirName) return;
+    const targetPath = `${localPath === '/' ? '' : localPath}/${dirName}`;
+    try {
+      await api.sftp.localMkdir(targetPath);
+      toast.success(`Created folder ${dirName}`);
+      loadLocalFiles(localPath);
+    } catch (err: any) {
+      toast.error(`Failed to create folder: ${err.message}`);
+    }
+  }
+
+  // Local Rename
+  async function handleRenameLocal(oldName: string) {
+    const newName = prompt('Enter new name:', oldName);
+    if (!newName || newName === oldName) return;
+    const oldPath = `${localPath === '/' ? '' : localPath}/${oldName}`;
+    const newPath = `${localPath === '/' ? '' : localPath}/${newName}`;
+    try {
+      await api.sftp.localRename(oldPath, newPath);
+      toast.success(`Renamed ${oldName} to ${newName}`);
+      loadLocalFiles(localPath);
+    } catch (err: any) {
+      toast.error(`Rename failed: ${err.message}`);
+    }
+  }
+
+  // Local Delete
+  async function handleDeleteLocal(name: string, isDir = false) {
+    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+    const itemPath = `${localPath === '/' ? '' : localPath}/${name}`;
+    try {
+      await api.sftp.localDelete(itemPath, isDir ? 'directory' : 'file');
+      toast.success(`Deleted ${name}`);
+      loadLocalFiles(localPath);
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err.message}`);
     }
   }
 
@@ -664,6 +778,16 @@ export function SFTPManager({ tab }: Props) {
           <Button
             size="sm"
             variant="outline"
+            onClick={handleMkdirLocal}
+            className="h-6 px-2 text-[10px] border-zinc-800 text-zinc-300 hover:text-white gap-1"
+            title="Create local directory"
+          >
+            <FolderPlus className="w-3 h-3" />
+            <span>New Folder</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onClick={handlePickLocalBrowserFolder}
             className="h-6 px-2 text-[10px] border-zinc-800 text-zinc-300 hover:text-white gap-1"
             title="Pick a folder directly from your client PC"
@@ -674,22 +798,46 @@ export function SFTPManager({ tab }: Props) {
         </div>
       </div>
 
-      {/* Local File Table */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      {/* Local File Table with Sticky Header & Resizable Columns */}
+      <div className="flex-1 overflow-auto flex flex-col relative">
         {loadingLocal ? (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 font-mono">
             <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
             <p className="text-xs">Reading local directory listing...</p>
           </div>
         ) : (
-          <ScrollArea className="flex-1">
-            <Table>
-              <TableHeader className="bg-zinc-900/90 sticky top-0 border-b border-zinc-800 select-none">
+          <div className="min-w-full inline-block align-middle">
+            <Table className="table-fixed w-full">
+              <TableHeader className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm">
                 <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs">Filename</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-24 whitespace-nowrap">Filesize</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs w-36 whitespace-nowrap">Filetype</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-40 whitespace-nowrap">Last modified</TableHead>
+                  <TableHead style={{ width: `${localColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+                    <span>Filename</span>
+                    <div
+                      onMouseDown={(e) => startColResize('local', 'name', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${localColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                    <span>Filesize</span>
+                    <div
+                      onMouseDown={(e) => startColResize('local', 'size', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${localColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+                    <span>Filetype</span>
+                    <div
+                      onMouseDown={(e) => startColResize('local', 'type', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${localColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                    <span>Last modified</span>
+                    <div
+                      onMouseDown={(e) => startColResize('local', 'modified', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -704,7 +852,7 @@ export function SFTPManager({ tab }: Props) {
                       <span className="font-bold text-amber-300">..</span>
                     </TableCell>
                     <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
-                    <TableCell className="py-1 text-zinc-500 text-xs">Parent directory</TableCell>
+                    <TableCell className="py-1 text-zinc-500 text-xs truncate">Parent directory</TableCell>
                     <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
                   </TableRow>
                 )}
@@ -730,23 +878,25 @@ export function SFTPManager({ tab }: Props) {
                           : 'hover:bg-zinc-900/40 text-zinc-300'
                       }`}
                     >
-                      <TableCell className="py-1 flex items-center gap-2">
-                        {isDir ? (
-                          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        ) : (
-                          <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        )}
-                        <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
-                          {file.name}
-                        </span>
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-2 truncate">
+                          {isDir ? (
+                            <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          ) : (
+                            <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                          )}
+                          <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
+                            {file.name}
+                          </span>
+                        </div>
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
                         {isDir ? '—' : file.size.toLocaleString()}
                       </TableCell>
-                      <TableCell className="py-1 text-zinc-400 text-xs whitespace-nowrap truncate max-w-[120px]">
+                      <TableCell className="py-1 text-zinc-400 text-xs truncate">
                         {file.filetype || getFileType(file.name, isDir)}
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
                         {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
                       </TableCell>
                     </TableRow>
@@ -754,17 +904,17 @@ export function SFTPManager({ tab }: Props) {
                 })}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         )}
 
         {/* Local Footer status (FileZilla format) */}
-        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none">
+        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none sticky bottom-0 z-10">
           <span>
             {localStats.fileCount} files and {localStats.dirCount} directories. Total size: {localStats.totalBytes.toLocaleString()} bytes
           </span>
           {selectedLocal && (
             <span className="text-emerald-400 truncate max-w-[200px]">
-              Selected: {selectedLocal} (Double-click to upload)
+              Selected: {selectedLocal}
             </span>
           )}
         </div>
@@ -863,7 +1013,7 @@ export function SFTPManager({ tab }: Props) {
         </div>
       </div>
 
-      {/* Remote File Table with Direct Drag & Drop */}
+      {/* Remote File Table with Sticky Header, Resizable Columns, and Direct Drag & Drop */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -883,7 +1033,7 @@ export function SFTPManager({ tab }: Props) {
             handleDirectUploadFiles(e.dataTransfer.files);
           }
         }}
-        className="relative flex-1 overflow-hidden flex flex-col"
+        className="relative flex-1 overflow-auto flex flex-col"
       >
         {isDraggingOverRemote && (
           <div className="absolute inset-0 z-30 bg-emerald-950/80 border-2 border-dashed border-emerald-400 flex flex-col items-center justify-center pointer-events-none backdrop-blur-xs animate-in fade-in">
@@ -899,15 +1049,45 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading remote directory listing...</p>
           </div>
         ) : (
-          <ScrollArea className="flex-1">
-            <Table>
-              <TableHeader className="bg-zinc-900/90 sticky top-0 border-b border-zinc-800 select-none">
+          <div className="min-w-full inline-block align-middle">
+            <Table className="table-fixed w-full">
+              <TableHeader className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm">
                 <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs">Filename</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-24 whitespace-nowrap">Filesize</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs w-36 whitespace-nowrap">Filetype</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-40 whitespace-nowrap">Last modified</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-24 whitespace-nowrap">Permissions</TableHead>
+                  <TableHead style={{ width: `${remoteColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+                    <span>Filename</span>
+                    <div
+                      onMouseDown={(e) => startColResize('remote', 'name', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${remoteColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                    <span>Filesize</span>
+                    <div
+                      onMouseDown={(e) => startColResize('remote', 'size', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${remoteColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs relative pr-3">
+                    <span>Filetype</span>
+                    <div
+                      onMouseDown={(e) => startColResize('remote', 'type', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${remoteColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                    <span>Last modified</span>
+                    <div
+                      onMouseDown={(e) => startColResize('remote', 'modified', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
+                  <TableHead style={{ width: `${remoteColWidths.perm}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right relative pr-3">
+                    <span>Permissions</span>
+                    <div
+                      onMouseDown={(e) => startColResize('remote', 'perm', e)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
+                    />
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -922,7 +1102,7 @@ export function SFTPManager({ tab }: Props) {
                       <span className="font-bold text-amber-300">..</span>
                     </TableCell>
                     <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
-                    <TableCell className="py-1 text-zinc-500 text-xs">Parent directory</TableCell>
+                    <TableCell className="py-1 text-zinc-500 text-xs truncate">Parent directory</TableCell>
                     <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
                     <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
                   </TableRow>
@@ -949,26 +1129,28 @@ export function SFTPManager({ tab }: Props) {
                           : 'hover:bg-zinc-900/40 text-zinc-300'
                       }`}
                     >
-                      <TableCell className="py-1 flex items-center gap-2">
-                        {isDir ? (
-                          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        ) : (
-                          <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        )}
-                        <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
-                          {file.name}
-                        </span>
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-2 truncate">
+                          {isDir ? (
+                            <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          ) : (
+                            <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                          )}
+                          <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
+                            {file.name}
+                          </span>
+                        </div>
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
                         {isDir ? '—' : file.size.toLocaleString()}
                       </TableCell>
-                      <TableCell className="py-1 text-zinc-400 text-xs whitespace-nowrap truncate max-w-[120px]">
+                      <TableCell className="py-1 text-zinc-400 text-xs truncate">
                         {getFileType(file.name, isDir)}
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
                         {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-500 text-xs whitespace-nowrap font-mono">
+                      <TableCell className="py-1 text-right text-zinc-500 text-xs font-mono">
                         {formatPermissions(file.permissions)}
                       </TableCell>
                     </TableRow>
@@ -976,11 +1158,11 @@ export function SFTPManager({ tab }: Props) {
                 })}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         )}
 
         {/* Remote Footer status (FileZilla format) */}
-        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none">
+        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none sticky bottom-0 z-10">
           <span>
             {remoteFileCount} files and {remoteDirCount} directories. Total size: {remoteTotalBytes.toLocaleString()} bytes
           </span>
@@ -1127,7 +1309,7 @@ export function SFTPManager({ tab }: Props) {
           />
           <div
             style={{ top: `${localContextMenu.y}px`, left: `${localContextMenu.x}px` }}
-            className="fixed z-50 min-w-[170px] bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl py-1 text-xs font-sans text-zinc-300 animate-in fade-in-50 zoom-in-95"
+            className="fixed z-50 min-w-[180px] bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl py-1 text-xs font-sans text-zinc-300 animate-in fade-in-50 zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-2.5 py-1 text-[10px] text-zinc-500 font-mono truncate border-b border-zinc-800/80 mb-1">
@@ -1135,18 +1317,46 @@ export function SFTPManager({ tab }: Props) {
             </div>
 
             {localContextMenu.item.type === 'file' && (
-              <button
-                onClick={() => {
-                  const item = localContextMenu.item;
-                  setLocalContextMenu(null);
-                  handleUploadLocalFile(item);
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload to Server</span>
-              </button>
+              <>
+                {canPreviewFile(localContextMenu.item.name) && (
+                  <button
+                    onClick={() => {
+                      const name = localContextMenu.item.name;
+                      setLocalContextMenu(null);
+                      handlePreviewFile(name, true);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Quick View / Preview</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    const item = localContextMenu.item;
+                    setLocalContextMenu(null);
+                    handleUploadLocalFile(item);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload to Server</span>
+                </button>
+              </>
             )}
+
+            <button
+              onClick={() => {
+                const name = localContextMenu.item.name;
+                setLocalContextMenu(null);
+                handleRenameLocal(name);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+              Rename
+            </button>
 
             <button
               onClick={() => {
@@ -1160,6 +1370,21 @@ export function SFTPManager({ tab }: Props) {
             >
               <Copy className="w-3.5 h-3.5" />
               Copy Local Path
+            </button>
+
+            <div className="h-px bg-zinc-800/80 my-1" />
+
+            <button
+              onClick={() => {
+                const name = localContextMenu.item.name;
+                const isDir = localContextMenu.item.type === 'directory';
+                setLocalContextMenu(null);
+                handleDeleteLocal(name, isDir);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete Local Item
             </button>
           </div>
         </>
@@ -1192,7 +1417,7 @@ export function SFTPManager({ tab }: Props) {
                     onClick={() => {
                       const name = remoteContextMenu.item.name;
                       setRemoteContextMenu(null);
-                      handlePreviewFile(name);
+                      handlePreviewFile(name, false);
                     }}
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
                   >
@@ -1333,10 +1558,11 @@ export function SFTPManager({ tab }: Props) {
       {previewModal.isOpen && (
         <FilePreviewModal
           isOpen={previewModal.isOpen}
-          onClose={() => setPreviewModal({ isOpen: false, filePath: '', fileName: '' })}
+          onClose={() => setPreviewModal({ isOpen: false, filePath: '', fileName: '', isLocal: false })}
           connectionId={tab.connectionId}
           filePath={previewModal.filePath}
           fileName={previewModal.fileName}
+          isLocal={previewModal.isLocal}
         />
       )}
     </div>
