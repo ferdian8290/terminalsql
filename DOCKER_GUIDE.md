@@ -37,21 +37,30 @@ docker compose version
 Untuk server on-premise tanpa akses internet (seperti `root@10.54.68.151`), Anda cukup menjalankan satu perintah otomatis dari komputer lokal:
 
 ```bash
-# 1. Full Deploy (Build lokal -> Kompresi -> Transfer -> Load offline -> Up container)
+# 1. Smart Sync (Otomatis mendeteksi perubahan: build & transfer jika ada kode baru, fast-sync jika hanya metadata)
 ./sync_to_docker.sh
 
-# 2. Cek status & healthcheck di server remote
+# 2. Force Rebuild & Full Transfer (Memaksa rebuild dan re-upload arsip 146MB)
+./sync_to_docker.sh force
+
+# 3. Cek status container & healthcheck di server remote
 ./sync_to_docker.sh status
 
-# 3. Stream log container di server remote
+# 4. Stream log container di server remote secara real-time
 ./sync_to_docker.sh logs
 
-# 4. Restart container di server remote
+# 5. Restart container di server remote
 ./sync_to_docker.sh restart
+
+# 6. Stop container di server remote
+./sync_to_docker.sh stop
 ```
 
 > [!NOTE]
-> Script ini otomatis mem-build image lokal, mentransfernya ke server `root@10.54.68.151:/root/docker_compose/terminalsql/`, me-load image secara offline, dan menyalakan container tanpa merusak database `./backend/data/terminalsql.db` yang sudah ada!
+> **Fitur Smart Image Hash Diffing & Fast-Sync:**
+> - Script melacak checksum kode sumber (`.last_built_source_hash`). Jika source code lokal tidak berubah dan remote server sudah memiliki image ID yang sama, script masuk ke mode **⚡ Fast-sync**.
+> - Pada mode Fast-sync, script **melewati build lokal, kompresi, transfer arsip 150MB, dan docker load**. Hanya konfigurasi & metadata (~6 KB) yang disinkronkan via rsync dalam **~2 detik** tanpa downtime!
+> - Arsip image Docker disimpan secara permanen di `./docker-images/terminalsql-images.tar.gz` (bukan di `/tmp/` yang terhapus saat reboot), siap digunakan kapan pun untuk keperluan instalasi offline.
 
 ---
 
@@ -178,4 +187,36 @@ Lalu restart:
 docker compose up -d
 ```
 Maka TerminalSQL otomatis berjalan di port `8080`!
+
+---
+
+## 7. Keamanan & Multi-Key Credential Resilience
+TerminalSQL mengenkripsi seluruh password dan credential koneksi (SSH, Database, SFTP) menggunakan algoritma **AES-256-GCM** dengan derivasi kunci PBKDF2 (100.000 iterasi).
+
+### Resilient Multi-Key Fallback:
+Ketika database dipindahkan antar server (misal dari instalasi native ke Docker, atau antar mesin on-premise), jika file `.env` di server baru memiliki `ENCRYPTION_KEY` yang berbeda dengan kunci saat koneksi pertama kali dibuat:
+- Sistem backend **secara otomatis mencoba fallback key** yang valid (`terminalsql_master_aes256_encryption_key_32c` dan kunci default instalasi).
+- Mencegah error `Failed to decrypt credentials: Unsupported state or unable to authenticate data`.
+- Koneksi tetap langsung dapat digunakan tanpa perlu memasukkan ulang password.
+
+---
+
+## 8. Troubleshooting
+
+### Q: Container backend gagal start atau koneksi SSH ditolak?
+Periksa log backend:
+```bash
+./sync_to_docker.sh logs
+```
+Pastikan folder database di host memiliki permission yang benar:
+```bash
+chmod -R 777 backend/data
+```
+
+### Q: Browser menampilkan pesan proxy error saat curl internal?
+Pada server korporat dengan environment `http_proxy` / `https_proxy`, selalu sertakan flag `--noproxy '*'` saat melakukan pengujian curl lokal:
+```bash
+curl --noproxy '*' -s http://127.0.0.1:3002/api/health
+```
+File `docker-compose.yml` telah secara otomatis mengonfigurasi variabel `HTTP_PROXY=` kosong dan `NO_PROXY=*` untuk mencegah container memutar traffic internal melalui proxy gateway eksternal.
 

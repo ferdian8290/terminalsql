@@ -168,14 +168,16 @@ Digunakan khusus untuk server on-premise perusahaan (seperti perbankan / telekom
 Dari komputer workstation lokal Anda yang memiliki akses SSH ke server on-premise:
 
 ```bash
-# Satu perintah otomatis:
-# 1. Build image Docker di komputer lokal
-# 2. Kompresi ke file arsip offline (145 MB)
-# 3. Transfer file via rsync ke server on-premise
-# 4. Load image ke Docker server secara offline (tanpa internet)
-# 5. Menjalankan container dan verifikasi healthcheck
+# 1. Smart Sync (Otomatis mendeteksi perubahan: build & transfer jika ada kode baru, fast-sync jika hanya metadata)
 ./sync_to_docker.sh
+
+# 2. Force Rebuild & Full Transfer (Memaksa build ulang dan upload penuh 146MB)
+./sync_to_docker.sh force
 ```
+
+> [!TIP]
+> **Smart Hash Diffing & Fast-Sync Mode:**
+> Script secara otomatis melacak checksum perubahan kode sumber (`.last_built_source_hash`). Jika source code tidak berubah, sinkronisasi hanya memakan waktu **~2 detik** untuk mentransfer file konfigurasi & metadata (~6 KB) tanpa mengupload ulang image 150MB. Arsip image Docker disimpan permanen di `./docker-images/terminalsql-images.tar.gz`.
 
 **Perintah Manajemen Server Offline:**
 ```bash
