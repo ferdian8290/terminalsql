@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Folder, File, Upload, Download, Trash2, FolderPlus,
-  Edit2, RefreshCw, ArrowUp, Home, Loader2, HardDrive,
-  Terminal, Laptop, ArrowRight, ArrowLeft, Copy, Eye, FolderOpen
+  Edit2, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, Home, Loader2, HardDrive,
+  Terminal, Laptop, ArrowRight, ArrowLeft, Copy, Eye, FolderOpen,
+  Search, X, Square, Columns2
 } from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
 import { api } from '@/utils/api';
@@ -160,19 +161,58 @@ export function SFTPManager({ tab }: Props) {
 
   const directUploadRef = useRef<HTMLInputElement>(null);
 
+  // Layout Pane Mode: 'single' (Remote Explorer, Default) vs 'dual' (FileZilla 2-Screen)
+  const [paneMode, setPaneMode] = useState<'single' | 'dual'>(() => {
+    return (localStorage.getItem('terminalsql_sftp_pane_mode') as 'single' | 'dual') || 'single';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('terminalsql_sftp_pane_mode', paneMode);
+  }, [paneMode]);
+
+  // Sorting & Filtering states
+  type SortKey = 'name' | 'size' | 'type' | 'modified' | 'perm';
+  type SortOrder = 'asc' | 'desc';
+
+  const [remoteSortKey, setRemoteSortKey] = useState<SortKey>('name');
+  const [remoteSortOrder, setRemoteSortOrder] = useState<SortOrder>('asc');
+  const [remoteSearchQuery, setRemoteSearchQuery] = useState('');
+
+  const [localSortKey, setLocalSortKey] = useState<SortKey>('name');
+  const [localSortOrder, setLocalSortOrder] = useState<SortOrder>('asc');
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+
+  function handleRemoteSort(key: SortKey) {
+    if (remoteSortKey === key) {
+      setRemoteSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setRemoteSortKey(key);
+      setRemoteSortOrder('asc');
+    }
+  }
+
+  function handleLocalSort(key: SortKey) {
+    if (localSortKey === key) {
+      setLocalSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setLocalSortKey(key);
+      setLocalSortOrder('asc');
+    }
+  }
+
   // Column widths (resizable)
   const [localColWidths, setLocalColWidths] = useState<{ name: number; size: number; type: number; modified: number }>({
     name: 240,
-    size: 100,
-    type: 140,
-    modified: 160,
+    size: 90,
+    type: 130,
+    modified: 150,
   });
   const [remoteColWidths, setRemoteColWidths] = useState<{ name: number; size: number; type: number; modified: number; perm: number }>({
-    name: 240,
-    size: 100,
-    type: 140,
-    modified: 160,
-    perm: 100,
+    name: 360,
+    size: 110,
+    type: 160,
+    modified: 180,
+    perm: 120,
   });
 
   const resizingColRef = useRef<{
@@ -196,10 +236,18 @@ export function SFTPManager({ tab }: Props) {
       startWidth,
     };
 
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizingColRef.current) return;
+      if (moveEvent.buttons === 0) {
+        handleMouseUp();
+        return;
+      }
       const diff = moveEvent.clientX - resizingColRef.current.startX;
-      const newWidth = Math.max(50, resizingColRef.current.startWidth + diff);
+      const minW = col === 'size' || col === 'perm' ? 70 : 100;
+      const newWidth = Math.max(minW, resizingColRef.current.startWidth + diff);
 
       if (resizingColRef.current.pane === 'local') {
         setLocalColWidths((prev) => ({ ...prev, [resizingColRef.current!.col]: newWidth }));
@@ -210,6 +258,8 @@ export function SFTPManager({ tab }: Props) {
 
     const handleMouseUp = () => {
       resizingColRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -323,10 +373,77 @@ export function SFTPManager({ tab }: Props) {
     const previewExtensions = [
       '.csv', '.tsv', '.txt', '.log', '.json', '.sql', '.sh', '.bash',
       '.env', '.conf', '.cfg', '.ini', '.yaml', '.yml', '.xml', '.md', '.js', '.ts',
-      '.py', '.tar', '.tar.gz', '.tgz', '.gz', '.html', '.htm', '.css'
+      '.py', '.tar', '.tar.gz', '.tgz', '.gz', '.html', '.htm', '.css',
+      '.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif'
     ];
     return previewExtensions.some((ext) => lower.endsWith(ext));
   }
+
+  // Reusable File Sorter (natural sort, folders always on top)
+  function sortFileList<T extends { name: string; size: number; type: string; modifiedAt?: number; permissions?: any; filetype?: string }>(
+    items: T[],
+    sortKey: SortKey,
+    sortOrder: SortOrder,
+    isRemote: boolean
+  ): T[] {
+    const result = [...items];
+    result.sort((a, b) => {
+      const aIsDir = a.type === 'directory';
+      const bIsDir = b.type === 'directory';
+      if (aIsDir && !bIsDir) return -1;
+      if (!aIsDir && bIsDir) return 1;
+
+      let cmp = 0;
+      switch (sortKey) {
+        case 'name':
+          cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'size':
+          cmp = (a.size || 0) - (b.size || 0);
+          break;
+        case 'type': {
+          const typeA = a.filetype || getFileType(a.name, aIsDir);
+          const typeB = b.filetype || getFileType(b.name, bIsDir);
+          cmp = typeA.localeCompare(typeB);
+          break;
+        }
+        case 'modified':
+          cmp = (a.modifiedAt || 0) - (b.modifiedAt || 0);
+          break;
+        case 'perm':
+          if (isRemote) {
+            const permA = formatPermissions(a.permissions);
+            const permB = formatPermissions(b.permissions);
+            cmp = permA.localeCompare(permB);
+          }
+          break;
+        default:
+          cmp = 0;
+      }
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+    return result;
+  }
+
+  // Filtered & Sorted Remote Files
+  const sortedAndFilteredRemoteFiles = useMemo(() => {
+    let list = remoteFiles;
+    if (remoteSearchQuery.trim()) {
+      const q = remoteSearchQuery.toLowerCase();
+      list = list.filter((f) => f.name.toLowerCase().includes(q));
+    }
+    return sortFileList(list, remoteSortKey, remoteSortOrder, true);
+  }, [remoteFiles, remoteSearchQuery, remoteSortKey, remoteSortOrder]);
+
+  // Filtered & Sorted Local Files
+  const sortedAndFilteredLocalFiles = useMemo(() => {
+    let list = localFiles;
+    if (localSearchQuery.trim()) {
+      const q = localSearchQuery.toLowerCase();
+      list = list.filter((f) => f.name.toLowerCase().includes(q));
+    }
+    return sortFileList(list, localSortKey, localSortOrder, false);
+  }, [localFiles, localSearchQuery, localSortKey, localSortOrder]);
 
   function handlePreviewFile(fileName?: string, isLocal = false) {
     if (isLocal) {
@@ -719,7 +836,7 @@ export function SFTPManager({ tab }: Props) {
   const remoteDirCount = remoteFiles.filter((f) => f.type === 'directory').length;
   const remoteTotalBytes = remoteFiles.reduce((acc, f) => acc + (f.size || 0), 0);
 
-  // Render Local Pane (Left Screen)
+  // Render Local Pane (Left Screen in Dual Pane mode)
   const renderLocalPane = () => (
     <div className="flex-1 h-full w-full flex flex-col bg-zinc-950 overflow-hidden">
       {/* Local Path Toolbar */}
@@ -732,7 +849,7 @@ export function SFTPManager({ tab }: Props) {
               e.preventDefault();
               loadLocalFiles(localPathInput);
             }}
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-[120px]"
           >
             <Input
               value={localPathInput}
@@ -774,7 +891,28 @@ export function SFTPManager({ tab }: Props) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Local Search filter */}
+          <div className="relative flex items-center w-32 sm:w-40">
+            <Search className="w-3 h-3 text-zinc-500 absolute left-2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Filter..."
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              className="w-full h-6 pl-6 pr-5 text-xs bg-zinc-950 border border-zinc-800 rounded text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500/80 font-sans"
+            />
+            {localSearchQuery && (
+              <button
+                onClick={() => setLocalSearchQuery('')}
+                className="absolute right-1.5 text-zinc-500 hover:text-zinc-300 p-0.5"
+                title="Clear filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
           <Button
             size="sm"
             variant="outline"
@@ -798,45 +936,127 @@ export function SFTPManager({ tab }: Props) {
         </div>
       </div>
 
-      {/* Local File Table with Sticky Header & Resizable Columns */}
-      <div className="flex-1 overflow-auto flex flex-col relative w-full">
+      {/* Local File Table with Sticky Header, Sorting & Resizable Columns */}
+      <div className="flex-1 overflow-auto min-h-0 relative w-full">
         {loadingLocal ? (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 font-mono">
             <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
             <p className="text-xs">Reading local directory listing...</p>
           </div>
         ) : (
-          <div className="w-max min-w-full">
-            <table className="caption-bottom text-sm border-collapse" style={{ width: `${Object.values(localColWidths).reduce((a, b) => a + b, 0)}px` }}>
+          <div className="w-max min-w-full inline-block align-top">
+            <table className="caption-bottom text-sm border-collapse table-fixed select-none" style={{ width: `${Object.values(localColWidths).reduce((a, b) => a + b, 0)}px` }}>
+              <colgroup>
+                <col style={{ width: `${localColWidths.name}px` }} />
+                <col style={{ width: `${localColWidths.size}px` }} />
+                <col style={{ width: `${localColWidths.type}px` }} />
+                <col style={{ width: `${localColWidths.modified}px` }} />
+              </colgroup>
               <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
                 <tr className="border-zinc-800 hover:bg-transparent">
-                  <th style={{ width: `${localColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
-                    <span>Filename</span>
+                  <th
+                    style={{ width: `${localColWidths.name}px` }}
+                    onClick={() => handleLocalSort('name')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Filename"
+                  >
+                    <div className="flex items-center gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Filename</span>
+                      {localSortKey === 'name' ? (
+                        localSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('local', 'name', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${localColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
-                    <span>Filesize</span>
+                  <th
+                    style={{ width: `${localColWidths.size}px` }}
+                    onClick={() => handleLocalSort('size')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Filesize"
+                  >
+                    <div className="flex items-center justify-end gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Filesize</span>
+                      {localSortKey === 'size' ? (
+                        localSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('local', 'size', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${localColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
-                    <span>Filetype</span>
+                  <th
+                    style={{ width: `${localColWidths.type}px` }}
+                    onClick={() => handleLocalSort('type')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Filetype"
+                  >
+                    <div className="flex items-center gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Filetype</span>
+                      {localSortKey === 'type' ? (
+                        localSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('local', 'type', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${localColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
-                    <span>Last modified</span>
+                  <th
+                    style={{ width: `${localColWidths.modified}px` }}
+                    onClick={() => handleLocalSort('modified')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Last modified"
+                  >
+                    <div className="flex items-center justify-end gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Last modified</span>
+                      {localSortKey === 'modified' ? (
+                        localSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('local', 'modified', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
                 </tr>
               </thead>
@@ -847,17 +1067,38 @@ export function SFTPManager({ tab }: Props) {
                     onDoubleClick={goUpLocal}
                     className="border-zinc-800/60 cursor-pointer font-mono text-xs hover:bg-zinc-900/60 text-amber-400 select-none"
                   >
-                    <TableCell className="py-1 flex items-center gap-2">
-                      <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="font-bold text-amber-300">..</span>
+                    <TableCell className="px-2 py-1 align-middle">
+                      <div className="flex items-center gap-2">
+                        <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="font-bold text-amber-300">..</span>
+                      </div>
                     </TableCell>
-                    <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
-                    <TableCell className="py-1 text-zinc-500 text-xs truncate">Parent directory</TableCell>
-                    <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-right text-zinc-600 text-xs font-mono">—</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-left text-zinc-500 text-xs truncate">Parent directory</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-right text-zinc-600 text-xs font-mono">—</TableCell>
                   </TableRow>
                 )}
 
-                {localFiles.map((file) => {
+                {sortedAndFilteredLocalFiles.length === 0 && localSearchQuery && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-28 text-center text-zinc-500 font-mono text-xs">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Search className="w-5 h-5 text-zinc-600" />
+                        <span>No local files match &ldquo;{localSearchQuery}&rdquo;</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLocalSearchQuery('')}
+                          className="h-6 px-2 text-xs border-zinc-800 text-zinc-300 hover:text-white"
+                        >
+                          Clear filter
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {sortedAndFilteredLocalFiles.map((file) => {
                   const isSelected = selectedLocal === file.name;
                   const isDir = file.type === 'directory';
 
@@ -878,25 +1119,25 @@ export function SFTPManager({ tab }: Props) {
                           : 'hover:bg-zinc-900/40 text-zinc-300'
                       }`}
                     >
-                      <TableCell className="py-1">
+                      <TableCell className="px-2 py-1 align-middle">
                         <div className="flex items-center gap-2 truncate">
                           {isDir ? (
                             <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                           ) : (
                             <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           )}
-                          <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
+                          <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : 'text-zinc-200'}`}>
                             {file.name}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
+                      <TableCell className="px-2 py-1 align-middle text-right text-zinc-400 text-xs font-mono truncate">
                         {isDir ? '—' : file.size.toLocaleString()}
                       </TableCell>
-                      <TableCell className="py-1 text-zinc-400 text-xs truncate">
+                      <TableCell className="px-2 py-1 align-middle text-left text-zinc-400 text-xs truncate">
                         {file.filetype || getFileType(file.name, isDir)}
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
+                      <TableCell className="px-2 py-1 align-middle text-right text-zinc-400 text-xs font-mono truncate">
                         {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
                       </TableCell>
                     </TableRow>
@@ -906,23 +1147,25 @@ export function SFTPManager({ tab }: Props) {
             </table>
           </div>
         )}
+      </div>
 
-        {/* Local Footer status (FileZilla format) */}
-        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none sticky bottom-0 z-10">
-          <span>
-            {localStats.fileCount} files and {localStats.dirCount} directories. Total size: {localStats.totalBytes.toLocaleString()} bytes
+      {/* Local Footer status (Fixed at bottom of pane) */}
+      <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none">
+        <span>
+          {localSearchQuery
+            ? `${sortedAndFilteredLocalFiles.length} matched (${localStats.fileCount} files, ${localStats.dirCount} dirs)`
+            : `${localStats.fileCount} files and ${localStats.dirCount} directories. Total size: ${localStats.totalBytes.toLocaleString()} bytes`}
+        </span>
+        {selectedLocal && (
+          <span className="text-emerald-400 truncate max-w-[200px]">
+            Selected: {selectedLocal}
           </span>
-          {selectedLocal && (
-            <span className="text-emerald-400 truncate max-w-[200px]">
-              Selected: {selectedLocal}
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
 
-  // Render Remote Pane (Right Screen)
+  // Render Remote Pane (Right Screen in Dual Pane mode or Full Screen in Single mode)
   const renderRemotePane = () => (
     <div className="flex-1 h-full w-full flex flex-col bg-zinc-950 overflow-hidden">
       {/* Remote Path Toolbar */}
@@ -935,7 +1178,7 @@ export function SFTPManager({ tab }: Props) {
               e.preventDefault();
               setRemotePath(remotePathInput);
             }}
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-[120px]"
           >
             <Input
               value={remotePathInput}
@@ -976,7 +1219,28 @@ export function SFTPManager({ tab }: Props) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Remote Search Filter */}
+          <div className="relative flex items-center w-36 sm:w-48">
+            <Search className="w-3 h-3 text-zinc-500 absolute left-2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search in folder..."
+              value={remoteSearchQuery}
+              onChange={(e) => setRemoteSearchQuery(e.target.value)}
+              className="w-full h-6 pl-6 pr-5 text-xs bg-zinc-950 border border-zinc-800 rounded text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500/80 font-sans"
+            />
+            {remoteSearchQuery && (
+              <button
+                onClick={() => setRemoteSearchQuery('')}
+                className="absolute right-1.5 text-zinc-500 hover:text-zinc-300 p-0.5"
+                title="Clear search"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
           <input
             ref={directUploadRef}
             type="file"
@@ -1013,7 +1277,7 @@ export function SFTPManager({ tab }: Props) {
         </div>
       </div>
 
-      {/* Remote File Table with Sticky Header, Resizable Columns, and Direct Drag & Drop */}
+      {/* Remote File Table with Sticky Header, Sorting, Resizable Columns, and Direct Drag & Drop */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -1033,7 +1297,7 @@ export function SFTPManager({ tab }: Props) {
             handleDirectUploadFiles(e.dataTransfer.files);
           }
         }}
-        className="relative flex-1 overflow-auto flex flex-col w-full"
+        className="relative flex-1 overflow-auto min-h-0 w-full"
       >
         {isDraggingOverRemote && (
           <div className="absolute inset-0 z-30 bg-emerald-950/80 border-2 border-dashed border-emerald-400 flex flex-col items-center justify-center pointer-events-none backdrop-blur-xs animate-in fade-in">
@@ -1049,44 +1313,146 @@ export function SFTPManager({ tab }: Props) {
             <p className="text-xs">Reading remote directory listing...</p>
           </div>
         ) : (
-          <div className="w-max min-w-full">
-            <table className="caption-bottom text-sm border-collapse" style={{ width: `${Object.values(remoteColWidths).reduce((a, b) => a + b, 0)}px` }}>
+          <div className="w-max min-w-full inline-block align-top">
+            <table className="caption-bottom text-sm border-collapse table-fixed select-none" style={{ width: `${Object.values(remoteColWidths).reduce((a, b) => a + b, 0)}px` }}>
+              <colgroup>
+                <col style={{ width: `${remoteColWidths.name}px` }} />
+                <col style={{ width: `${remoteColWidths.size}px` }} />
+                <col style={{ width: `${remoteColWidths.type}px` }} />
+                <col style={{ width: `${remoteColWidths.modified}px` }} />
+                <col style={{ width: `${remoteColWidths.perm}px` }} />
+              </colgroup>
               <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
                 <tr className="border-zinc-800 hover:bg-transparent">
-                  <th style={{ width: `${remoteColWidths.name}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
-                    <span>Filename</span>
+                  <th
+                    style={{ width: `${remoteColWidths.name}px` }}
+                    onClick={() => handleRemoteSort('name')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Filename"
+                  >
+                    <div className="flex items-center gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Filename</span>
+                      {remoteSortKey === 'name' ? (
+                        remoteSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('remote', 'name', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${remoteColWidths.size}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
-                    <span>Filesize</span>
+                  <th
+                    style={{ width: `${remoteColWidths.size}px` }}
+                    onClick={() => handleRemoteSort('size')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Filesize"
+                  >
+                    <div className="flex items-center justify-end gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Filesize</span>
+                      {remoteSortKey === 'size' ? (
+                        remoteSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('remote', 'size', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${remoteColWidths.type}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative pr-3">
-                    <span>Filetype</span>
+                  <th
+                    style={{ width: `${remoteColWidths.type}px` }}
+                    onClick={() => handleRemoteSort('type')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Filetype"
+                  >
+                    <div className="flex items-center gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Filetype</span>
+                      {remoteSortKey === 'type' ? (
+                        remoteSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('remote', 'type', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${remoteColWidths.modified}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
-                    <span>Last modified</span>
+                  <th
+                    style={{ width: `${remoteColWidths.modified}px` }}
+                    onClick={() => handleRemoteSort('modified')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Last modified"
+                  >
+                    <div className="flex items-center justify-end gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Last modified</span>
+                      {remoteSortKey === 'modified' ? (
+                        remoteSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('remote', 'modified', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
-                  <th style={{ width: `${remoteColWidths.perm}px` }} className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative pr-3">
-                    <span>Permissions</span>
+                  <th
+                    style={{ width: `${remoteColWidths.perm}px` }}
+                    onClick={() => handleRemoteSort('perm')}
+                    className="text-zinc-400 font-semibold h-7 text-xs text-right px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    title="Sort by Permissions"
+                  >
+                    <div className="flex items-center justify-end gap-1.5 pr-3 overflow-hidden">
+                      <span className="truncate">Permissions</span>
+                      {remoteSortKey === 'perm' ? (
+                        remoteSortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-sky-400 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-sky-400 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => startColResize('remote', 'perm', e)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-sky-500/80 active:bg-sky-500 transition-colors"
-                    />
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-30 flex items-center justify-center group-hover:bg-sky-500/20 active:bg-sky-500/40"
+                    >
+                      <div className="w-[2px] h-full bg-zinc-700 group-hover:bg-sky-400 transition-colors" />
+                    </div>
                   </th>
                 </tr>
               </thead>
@@ -1097,18 +1463,39 @@ export function SFTPManager({ tab }: Props) {
                     onDoubleClick={goUpRemote}
                     className="border-zinc-800/60 cursor-pointer font-mono text-xs hover:bg-zinc-900/60 text-amber-400 select-none"
                   >
-                    <TableCell className="py-1 flex items-center gap-2">
-                      <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="font-bold text-amber-300">..</span>
+                    <TableCell className="px-2 py-1 align-middle">
+                      <div className="flex items-center gap-2">
+                        <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="font-bold text-amber-300">..</span>
+                      </div>
                     </TableCell>
-                    <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
-                    <TableCell className="py-1 text-zinc-500 text-xs truncate">Parent directory</TableCell>
-                    <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
-                    <TableCell className="py-1 text-right text-zinc-600 text-xs">—</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-right text-zinc-600 text-xs font-mono">—</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-left text-zinc-500 text-xs truncate">Parent directory</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-right text-zinc-600 text-xs font-mono">—</TableCell>
+                    <TableCell className="px-2 py-1 align-middle text-right text-zinc-600 text-xs font-mono">—</TableCell>
                   </TableRow>
                 )}
 
-                {remoteFiles.map((file) => {
+                {sortedAndFilteredRemoteFiles.length === 0 && remoteSearchQuery && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-28 text-center text-zinc-500 font-mono text-xs">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Search className="w-5 h-5 text-zinc-600" />
+                        <span>No files or folders match &ldquo;{remoteSearchQuery}&rdquo;</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setRemoteSearchQuery('')}
+                          className="h-6 px-2 text-xs border-zinc-800 text-zinc-300 hover:text-white"
+                        >
+                          Clear filter
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {sortedAndFilteredRemoteFiles.map((file) => {
                   const isSelected = selectedRemote === file.name;
                   const isDir = file.type === 'directory';
 
@@ -1129,28 +1516,28 @@ export function SFTPManager({ tab }: Props) {
                           : 'hover:bg-zinc-900/40 text-zinc-300'
                       }`}
                     >
-                      <TableCell className="py-1">
+                      <TableCell className="px-2 py-1 align-middle">
                         <div className="flex items-center gap-2 truncate">
                           {isDir ? (
                             <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                           ) : (
                             <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           )}
-                          <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
+                          <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : 'text-zinc-200'}`}>
                             {file.name}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
-                        {isDir ? '—' : file.size.toLocaleString()}
+                      <TableCell className="px-2 py-1 align-middle text-right text-zinc-400 text-xs font-mono truncate">
+                        {isDir ? '—' : (file.size || 0).toLocaleString()}
                       </TableCell>
-                      <TableCell className="py-1 text-zinc-400 text-xs truncate">
+                      <TableCell className="px-2 py-1 align-middle text-left text-zinc-400 text-xs truncate">
                         {getFileType(file.name, isDir)}
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-400 text-xs font-mono">
+                      <TableCell className="px-2 py-1 align-middle text-right text-zinc-400 text-xs font-mono truncate">
                         {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
                       </TableCell>
-                      <TableCell className="py-1 text-right text-zinc-500 text-xs font-mono">
+                      <TableCell className="px-2 py-1 align-middle text-right text-zinc-500 text-xs font-mono truncate">
                         {formatPermissions(file.permissions)}
                       </TableCell>
                     </TableRow>
@@ -1160,18 +1547,20 @@ export function SFTPManager({ tab }: Props) {
             </table>
           </div>
         )}
+      </div>
 
-        {/* Remote Footer status (FileZilla format) */}
-        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none sticky bottom-0 z-10">
-          <span>
-            {remoteFileCount} files and {remoteDirCount} directories. Total size: {remoteTotalBytes.toLocaleString()} bytes
+      {/* Remote Footer status (Fixed at bottom of pane) */}
+      <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none">
+        <span>
+          {remoteSearchQuery
+            ? `${sortedAndFilteredRemoteFiles.length} matched (${remoteFileCount} files, ${remoteDirCount} dirs)`
+            : `${remoteFileCount} files and ${remoteDirCount} directories. Total size: ${remoteTotalBytes.toLocaleString()} bytes`}
+        </span>
+        {selectedRemote && (
+          <span className="text-amber-400 truncate max-w-[260px]">
+            Selected: {selectedRemote}
           </span>
-          {selectedRemote && (
-            <span className="text-amber-400 truncate max-w-[200px]">
-              Selected: {selectedRemote}
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -1190,35 +1579,65 @@ export function SFTPManager({ tab }: Props) {
           </span>
         </div>
 
-        {/* Transfer Action Controls in Header (Always visible in 2-screen Dual-Pane) */}
+        {/* View Layout Toggle: Single Pane (Default) vs Dual Pane (FileZilla) */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => handleUploadLocalFile()}
-              disabled={!selectedLocal}
-              className={`h-5 px-2 text-[11px] gap-1 ${selectedLocal ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40' : 'text-zinc-600'}`}
-              title="Upload selected local file to server"
+          <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded p-0.5">
+            <button
+              onClick={() => setPaneMode('single')}
+              className={`h-5 px-2 text-[11px] rounded flex items-center gap-1 transition-colors ${
+                paneMode === 'single'
+                  ? 'bg-zinc-800 text-sky-400 font-semibold shadow-xs'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="Single Screen View (Remote Explorer, optimal full width)"
             >
-              <ArrowRight className="w-3 h-3" />
-              <span>Upload &rarr;</span>
-            </Button>
-
-            <Separator orientation="vertical" className="h-3 bg-zinc-800" />
-
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => handleDownloadToLocal()}
-              disabled={!selectedRemote}
-              className={`h-5 px-2 text-[11px] gap-1 ${selectedRemote ? 'text-sky-400 hover:text-sky-300 hover:bg-sky-950/40' : 'text-zinc-600'}`}
-              title="Download selected remote file to local directory"
+              <Square className="w-3 h-3" />
+              <span>Single</span>
+            </button>
+            <button
+              onClick={() => setPaneMode('dual')}
+              className={`h-5 px-2 text-[11px] rounded flex items-center gap-1 transition-colors ${
+                paneMode === 'dual'
+                  ? 'bg-zinc-800 text-sky-400 font-semibold shadow-xs'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="Dual-Pane View (Side-by-side Local site & Remote server)"
             >
-              <ArrowLeft className="w-3 h-3" />
-              <span>&larr; Download</span>
-            </Button>
+              <Columns2 className="w-3 h-3" />
+              <span>Dual Pane</span>
+            </button>
           </div>
+
+          {/* Transfer Action Controls in Header (Only when Dual-Pane is active) */}
+          {paneMode === 'dual' && (
+            <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleUploadLocalFile()}
+                disabled={!selectedLocal}
+                className={`h-5 px-2 text-[11px] gap-1 ${selectedLocal ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40' : 'text-zinc-600'}`}
+                title="Upload selected local file to server"
+              >
+                <ArrowRight className="w-3 h-3" />
+                <span>Upload &rarr;</span>
+              </Button>
+
+              <Separator orientation="vertical" className="h-3 bg-zinc-800" />
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleDownloadToLocal()}
+                disabled={!selectedRemote}
+                className={`h-5 px-2 text-[11px] gap-1 ${selectedRemote ? 'text-sky-400 hover:text-sky-300 hover:bg-sky-950/40' : 'text-zinc-600'}`}
+                title="Download selected remote file to local directory"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                <span>&larr; Download</span>
+              </Button>
+            </div>
+          )}
 
           <Button
             variant="outline"
@@ -1283,17 +1702,23 @@ export function SFTPManager({ tab }: Props) {
         </>
       )}
 
-      {/* Main Dual-Pane View: Resizable Left (Local Site) & Right (Remote Server Site) */}
+      {/* Main Workspace View: Single Pane (Default) vs Dual-Pane */}
       <div className="flex-1 flex overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="flex-1 h-full w-full">
-          <ResizablePanel defaultSize={50} minSize={20} className="flex flex-col bg-zinc-950 border-r border-zinc-800/60 overflow-hidden">
-            {renderLocalPane()}
-          </ResizablePanel>
-          <ResizableHandle withHandle className="bg-zinc-800 hover:bg-zinc-600 transition-colors" />
-          <ResizablePanel defaultSize={50} minSize={20} className="flex flex-col bg-zinc-950 overflow-hidden">
+        {paneMode === 'dual' ? (
+          <ResizablePanelGroup direction="horizontal" className="flex-1 h-full w-full">
+            <ResizablePanel defaultSize={50} minSize={20} className="flex flex-col bg-zinc-950 border-r border-zinc-800/60 overflow-hidden">
+              {renderLocalPane()}
+            </ResizablePanel>
+            <ResizableHandle withHandle className="bg-zinc-800 hover:bg-zinc-600 transition-colors" />
+            <ResizablePanel defaultSize={50} minSize={20} className="flex flex-col bg-zinc-950 overflow-hidden">
+              {renderRemotePane()}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <div className="flex-1 h-full w-full flex flex-col bg-zinc-950 overflow-hidden">
             {renderRemotePane()}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </div>
+        )}
       </div>
 
       {/* Native Context Menu for Local Pane */}
@@ -1328,7 +1753,7 @@ export function SFTPManager({ tab }: Props) {
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Quick View / Preview</span>
+                    <span>Quick View</span>
                   </button>
                 )}
 
@@ -1422,7 +1847,7 @@ export function SFTPManager({ tab }: Props) {
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Quick View / Preview</span>
+                    <span>Quick View</span>
                   </button>
                 )}
 
@@ -1430,25 +1855,27 @@ export function SFTPManager({ tab }: Props) {
                   onClick={() => {
                     const name = remoteContextMenu.item.name;
                     setRemoteContextMenu(null);
-                    handleDownloadToLocal(name);
+                    handleDownloadFile(name);
                   }}
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Download to Local site</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    const name = remoteContextMenu.item.name;
-                    setRemoteContextMenu(null);
-                    handleDownloadFile(name);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download to PC (Browser)</span>
-                </button>
+                {paneMode === 'dual' && (
+                  <button
+                    onClick={() => {
+                      const name = remoteContextMenu.item.name;
+                      setRemoteContextMenu(null);
+                      handleDownloadToLocal(name);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Download to Local site</span>
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -1463,17 +1890,19 @@ export function SFTPManager({ tab }: Props) {
                   <span>Open Folder</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    const name = remoteContextMenu.item.name;
-                    setRemoteContextMenu(null);
-                    handleDownloadToLocal(name);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Download to Local site</span>
-                </button>
+                {paneMode === 'dual' && (
+                  <button
+                    onClick={() => {
+                      const name = remoteContextMenu.item.name;
+                      setRemoteContextMenu(null);
+                      handleDownloadToLocal(name);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Download to Local site</span>
+                  </button>
+                )}
               </>
             )}
 

@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.13-purple)
+![Version](https://img.shields.io/badge/Version-1.5.14-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,13 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.14] - 2026-10-30
+- **Optimal Single-Pane Explorer View (Default)**: Full-width remote file explorer layout maximizing screen space for `Filename`, `Filesize`, `Filetype`, `Last modified`, and `Permissions`, with a one-click toggle between `Single View` and classic FileZilla `Dual Pane` view.
+- **In-Folder Real-Time Search & Filter**: Added an instant search bar in the toolbar to quickly filter files and folders in the currently opened remote directory, with live matching count in the status bar.
+- **Interactive Column Sorting**: Implemented column header sorting across all columns (`Filename`, `Filesize`, `Filetype`, `Last modified`, `Permissions`) with ascending/descending indicators, natural alphanumeric ordering, and directory priority grouping.
+- **Clean Context Menu & Direct PC Downloads**: Cleaned context menu labels (e.g. `Quick View` without slashes), streamlined direct `Download` directly to client PC Downloads, and direct `Upload` from PC file dialog or desktop Drag & Drop.
+- **Fixed Pane Footers**: Status footers pinned firmly at the bottom of panes, preventing displacement during horizontal or vertical file list scrolling.
 
 ### [v1.5.13] - 2026-10-30
 - **Auto-Resolve Windows User Profile in WSL**: Automatically mounted Windows user profile (`C:\Users\KAM-IPS3I-4`) as the default local root when running inside WSL, showing genuine PC files (`Downloads`, `Documents`, etc.) directly on `Local site`.
