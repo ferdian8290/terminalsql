@@ -143,6 +143,8 @@ rsync -avz \
   --exclude="docker-images" \
   --exclude="*.tar.gz" \
   --exclude="*.tar" \
+  --exclude="sync_to_server.sh" \
+  --exclude="terminalsql.service" \
   "${LOCAL_DIR}/" \
   "${REMOTE_HOST}:${REMOTE_DIR}/"
 

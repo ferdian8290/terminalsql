@@ -99,6 +99,14 @@ else
     --exclude="backend/data/*.db-shm" \
     --exclude="backend/data/*.db-wal" \
     --exclude=".env.local" \
+    --exclude="docker-images" \
+    --exclude="docker-images/**" \
+    --exclude="*.tar.gz" \
+    --exclude="*.tar" \
+    --exclude="Dockerfile" \
+    --exclude="Dockerfile.*" \
+    --exclude="docker-compose*.yml" \
+    --exclude="sync_to_docker.sh" \
     "${LOCAL_DIR}/" \
     "${REMOTE_HOST}:${REMOTE_DIR}/"
 

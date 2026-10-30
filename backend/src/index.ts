@@ -98,7 +98,7 @@ async function bootstrap() {
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',
-    version: '1.5.19',
+    version: '1.5.20',
     timestamp: new Date().toISOString(),
   }));
 

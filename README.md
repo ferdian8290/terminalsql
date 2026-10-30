@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.19-purple)
+![Version](https://img.shields.io/badge/Version-1.5.20-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -294,7 +294,9 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 
 ## Changelog & Version History
 
-### [v1.5.19] - 2026-10-30
+### [v1.5.20] - 2026-10-30
+- **Pure Native Delta Sync (Zero Docker Overhead)**: Excluded `docker-images`, archives (`*.tar.gz`), `Dockerfile*`, and `docker-compose*.yml` from `sync_to_server.sh`. Native server updates now transfer exclusively modified code and web assets via rsync delta algorithm, completing deployments in ~1 second.
+- **Smart Container Fast-Sync Separation**: Enhanced `sync_to_docker.sh` to strictly exclude native server scripts while leveraging `.image_hash` diffing to skip redundant 150MB image transfers when remote container images are already up to date.
 - **Guaranteed Full-Width Table Layout & Zero-Gap Columns**: Enforced `minWidth: '100%'` with flexible `w-auto` Filename column absorption. Column dividers stay resizable while the table seamlessly hugs the right viewport edge under the toolbar across any monitor width, eliminating empty void spaces.
 - **Smart Session Tab Deduplication & Auto-Cleanup**: Prevented duplicate tabs from spawning when clicking existing connections in the sidebar. Automatically deduplicates historical tabs saved in `localStorage` upon page load, stopping concurrent SSH/SFTP connection storms against remote servers.
 - **Resilient Multi-Attempt SFTP Connection Recovery**: Upgraded `getSftpClient` in `backend/src/modules/sftp/routes.ts` with 3 connection attempts, exponential backoff, and robust regex detection covering `ECONNRESET`, `read ECONNRESET`, `connect ECONNRESET`, `ETIMEDOUT`, and `ECONNREFUSED`.
