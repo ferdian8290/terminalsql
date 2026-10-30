@@ -19,6 +19,18 @@ interface SftpSessionHandle {
   cleanup: () => Promise<void>;
 }
 
+function formatRights(rights: any): string {
+  if (!rights) return '—';
+  if (typeof rights === 'string') return rights;
+  if (typeof rights === 'object' && rights !== null) {
+    const u = rights.user || '---';
+    const g = rights.group || '---';
+    const o = rights.other || '---';
+    return `${u}${g}${o}`;
+  }
+  return String(rights);
+}
+
 async function getSftpClient(conn: any, creds: any, userId?: string): Promise<SftpSessionHandle> {
   const sftp = new SftpClient();
   let bastionClient: any;
@@ -90,7 +102,7 @@ export async function sftpRoutes(app: FastifyInstance) {
         type: f.type === 'd' ? 'directory' : 'file',
         size: f.size,
         modifiedAt: f.modifyTime,
-        permissions: f.rights,
+        permissions: formatRights(f.rights),
         owner: f.owner,
         group: f.group,
       }));

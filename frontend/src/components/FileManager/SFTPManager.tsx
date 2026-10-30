@@ -72,6 +72,21 @@ function formatDate(ts: number): string {
   return `${month}/${day}/${year} ${hours}:${mins}:${secs}`;
 }
 
+function formatPermissions(perm: any): string {
+  if (!perm) return '—';
+  if (typeof perm === 'string') return perm;
+  if (typeof perm === 'object' && perm !== null) {
+    const u = perm.user || '---';
+    const g = perm.group || '---';
+    const o = perm.other || '---';
+    return `${u}${g}${o}`;
+  }
+  if (typeof perm === 'number') {
+    return (perm & 0o777).toString(8);
+  }
+  return String(perm);
+}
+
 function getFileType(name: string, isDir: boolean): string {
   if (isDir) return 'File folder';
   const lower = name.toLowerCase();
@@ -954,7 +969,7 @@ export function SFTPManager({ tab }: Props) {
                         {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
                       </TableCell>
                       <TableCell className="py-1 text-right text-zinc-500 text-xs whitespace-nowrap font-mono">
-                        {file.permissions || '—'}
+                        {formatPermissions(file.permissions)}
                       </TableCell>
                     </TableRow>
                   );

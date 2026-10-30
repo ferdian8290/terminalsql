@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.10-purple)
+![Version](https://img.shields.io/badge/Version-1.5.11-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,9 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.11] - 2026-10-30
+- **Fix SFTP Permissions Object React Error #31**: Corrected `permissions` rendering in `SFTPManager.tsx` and serialized `f.rights` in `backend/src/modules/sftp/routes.ts` so `{ user, group, other }` object is safely formatted into standard POSIX notation string (`rwxr-xr-x`), eliminating Minified React Error #31 crash.
 
 ### [v1.5.10] - 2026-10-30
 - **Permanent 2-Screen Dual-Pane Layout**: Enforced standard Dual-Pane (FileZilla / WinSCP style) layout for SFTP Manager: Left Screen = Local site / staged PC files, Right Screen = Remote server filesystem with resizable split divider.
