@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.7-purple)
+![Version](https://img.shields.io/badge/Version-1.5.8-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,12 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.8] - 2026-10-30
+- **Seamless SFTP Integration & Persistent Tab**: Always displayed the dedicated SFTP category tab in the left sidebar switcher (`Database`, `Terminal`, `SFTP`) regardless of manual connection type, automatically including all SSH hosts as immediate SFTP storage targets.
+- **Full Remote Explorer Mode**: Introduced a dedicated Full Remote File Explorer view (100% width) in `SFTPManager` as the default display, avoiding confusing blank staged file panes. Added a toggle button for dual-pane FileZilla style.
+- **Direct Upload & Drag-and-Drop**: Added a direct "Upload" button on the remote toolbar and direct drag-and-drop support over the remote file explorer to immediately transfer files into the active remote directory.
+- **Cross-Launch Context Menus**: Enabled 1-click cross-launching between SSH Terminal and SFTP File Manager from custom native right-click context menus.
 
 ### [v1.5.7] - 2026-10-30
 - **Resilient Multi-Key Credential Decryption**: Implemented multi-key fallback decryption in `backend/src/utils/crypto.ts`. If environment encryption keys differ across container or host migrations, credentials automatically fall back to known keys without throwing `Unsupported state or unable to authenticate data`.

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Folder, File, Upload, Download, Trash2, FolderPlus,
   Edit2, RefreshCw, ChevronRight, ArrowUp, Home, Loader2, HardDrive,
-  Terminal, Laptop, ArrowRight, ArrowLeft, Copy
+  Terminal, Laptop, ArrowRight, ArrowLeft, Copy, Columns, Maximize2
 } from 'lucide-react';
 import { api } from '@/utils/api';
 import { useAppStore, Tab } from '@/store/appStore';
@@ -109,6 +109,84 @@ export function SFTPManager({ tab }: Props) {
   const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const directUploadRef = useRef<HTMLInputElement>(null);
+
+  const [viewMode, setViewMode] = useState<'remote' | 'dual'>(() => {
+    return (localStorage.getItem('terminalsql_sftp_view_mode') as 'remote' | 'dual') || 'remote';
+  });
+  const [isDraggingOverRemote, setIsDraggingOverRemote] = useState(false);
+
+  const toggleViewMode = () => {
+    setViewMode((prev) => {
+      const next = prev === 'remote' ? 'dual' : 'remote';
+      localStorage.setItem('terminalsql_sftp_view_mode', next);
+      return next;
+    });
+  };
+
+  const handleDragOverRemote = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOverRemote(true);
+  };
+
+  const handleDragLeaveRemote = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOverRemote(false);
+  };
+
+  const handleDropOnRemote = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOverRemote(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleDirectUploadFiles(e.dataTransfer.files);
+    }
+  };
+
+  async function handleDirectUploadFiles(files: FileList | File[]) {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
+    for (const file of fileArray) {
+      addLog(`Command: put "${file.name}" to "${remotePath}"`);
+      const toastId = toast.loading(`Uploading ${file.name}...`);
+      try {
+        await api.sftp.upload(
+          tab.connectionId,
+          remotePath + (remotePath.endsWith('/') ? '' : '/') + file.name,
+          file
+        );
+        toast.success(`Uploaded ${file.name}`, { id: toastId });
+        addLog(`Status: File transfer successful, transferred ${formatSize(file.size)}`);
+        setTransfers((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: file.size,
+            direction: 'upload',
+            status: 'success',
+            time: new Date().toLocaleTimeString(),
+          },
+        ]);
+      } catch (err: any) {
+        addLog(`Error: File transfer failed: ${err.message}`);
+        toast.error(`Upload failed: ${err.message}`, { id: toastId });
+        setTransfers((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: file.size,
+            direction: 'upload',
+            status: 'failed',
+            time: new Date().toLocaleTimeString(),
+          },
+        ]);
+      }
+    }
+    loadRemoteFiles(remotePath);
+  }
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -392,6 +470,357 @@ export function SFTPManager({ tab }: Props) {
     toast.success(`Opening SSH Terminal for ${tab.connection?.name || 'Session'}`);
   }
 
+  const renderLocalPane = () => (
+    <div className="flex-1 h-full w-full flex flex-col bg-zinc-950 overflow-hidden">
+      {/* Local Path Toolbar */}
+      <div className="h-8 px-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <Laptop className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          <span className="text-[11px] font-mono text-zinc-400 font-semibold shrink-0">Local site:</span>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+            }}
+            className="flex-1 min-w-0"
+          >
+            <Input
+              value={localPathInput}
+              onChange={(e) => setLocalPathInput(e.target.value)}
+              className="h-6 text-[11px] font-mono bg-zinc-950 border-zinc-800 text-zinc-200 px-2 py-0 truncate"
+            />
+          </form>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setLocalPathInput('C:/Users/Local/')}
+            className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
+            title="Local Root"
+          >
+            <Home className="w-3 h-3" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-6 px-2 text-[10px] border-zinc-800 text-zinc-300 hover:text-white gap-1"
+            title="Browse files from your computer to stage here"
+          >
+            <HardDrive className="w-3 h-3 text-sky-400" />
+            <span>Browse PC...</span>
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => handleLocalFilesPicked(e.target.files)}
+          />
+        </div>
+      </div>
+
+      {/* Local File Table */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {localFiles.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-2 select-none">
+            <Laptop className="w-8 h-8 opacity-25 text-zinc-400" />
+            <h3 className="text-xs font-semibold text-zinc-300">No files staged</h3>
+            <p className="text-[11px] text-zinc-500 leading-relaxed max-w-[200px]">
+              Drag files from your PC onto this panel, or click <span className="text-sky-400 font-mono">Browse PC...</span> to stage files for upload.
+            </p>
+          </div>
+        ) : (
+          <ScrollArea className="flex-1">
+            <Table>
+              <TableHeader className="bg-zinc-900/90 sticky top-0 border-b border-zinc-800 select-none">
+                <TableRow className="border-zinc-800 hover:bg-transparent">
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs">Filename</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-20 whitespace-nowrap">Filesize</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs w-28 whitespace-nowrap">Filetype</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-36 whitespace-nowrap">Last modified</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {localFiles.map((file) => {
+                  const isSelected = selectedLocal === file.name;
+                  const isDir = file.type === 'directory';
+
+                  return (
+                    <TableRow
+                      key={file.name}
+                      onClick={() => setSelectedLocal(isSelected ? null : file.name)}
+                      onDoubleClick={() => handleUploadLocalFile(file)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSelectedLocal(file.name);
+                        setLocalContextMenu({ x: e.clientX, y: e.clientY, item: file });
+                      }}
+                      className={`border-zinc-800/60 cursor-pointer font-mono text-xs transition-colors ${
+                        isSelected
+                          ? 'bg-zinc-800/90 text-white'
+                          : 'hover:bg-zinc-900/40 text-zinc-300'
+                      }`}
+                    >
+                      <TableCell className="py-1 flex items-center gap-2">
+                        {isDir ? (
+                          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        ) : (
+                          <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        )}
+                        <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
+                          {file.name}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                        {isDir ? '—' : formatSize(file.size)}
+                      </TableCell>
+                      <TableCell className="py-1 text-zinc-400 text-xs whitespace-nowrap truncate max-w-[100px]">
+                        {getFileType(file.name, isDir)}
+                      </TableCell>
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                        {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+
+        {/* Local Footer status */}
+        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-500 shrink-0">
+          <span>{localFiles.length} local items</span>
+          {selectedLocal && (
+            <span className="text-emerald-400 truncate max-w-[200px]">
+              Selected: {selectedLocal} (Double-click to upload)
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderRemotePane = () => (
+    <div className="flex-1 h-full w-full flex flex-col bg-zinc-950 overflow-hidden">
+      {/* Remote Path Toolbar */}
+      <div className="h-8 px-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="text-[11px] font-mono text-zinc-400 font-semibold shrink-0">Remote site:</span>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setRemotePath(remotePathInput);
+            }}
+            className="flex-1 min-w-0"
+          >
+            <Input
+              value={remotePathInput}
+              onChange={(e) => setRemotePathInput(e.target.value)}
+              className="h-6 text-[11px] font-mono bg-zinc-950 border-zinc-800 text-zinc-200 px-2 py-0 truncate"
+            />
+          </form>
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={goUpRemote}
+            disabled={remotePath === '/'}
+            className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
+            title="Go up one remote directory"
+          >
+            <ArrowUp className="w-3 h-3" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setRemotePath('.')}
+            className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
+            title="Go to Home directory (~)"
+          >
+            <Home className="w-3 h-3" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <input
+            ref={directUploadRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) {
+                handleDirectUploadFiles(e.target.files);
+                e.target.value = '';
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => directUploadRef.current?.click()}
+            className="border-emerald-700/50 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-900/40 hover:text-emerald-300 h-6 px-2 text-xs gap-1 font-sans"
+            title="Upload files from your computer directly into this folder"
+          >
+            <Upload className="w-3 h-3" />
+            <span>Upload</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMkdirRemote}
+            className="border-zinc-800 text-zinc-300 hover:text-white h-6 px-2 text-xs gap-1"
+            title="Create Directory on Server"
+          >
+            <FolderPlus className="w-3 h-3" />
+            <span>New Folder</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => loadRemoteFiles(remotePath)}
+            className="text-zinc-400 hover:text-white h-6 px-1.5 text-xs gap-1"
+            title="Refresh Remote Directory"
+          >
+            <RefreshCw className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Remote File Table with Direct Drag & Drop */}
+      <div
+        onDragOver={handleDragOverRemote}
+        onDragLeave={handleDragLeaveRemote}
+        onDrop={handleDropOnRemote}
+        className="relative flex-1 overflow-hidden flex flex-col"
+      >
+        {isDraggingOverRemote && (
+          <div className="absolute inset-0 z-30 bg-emerald-950/80 border-2 border-dashed border-emerald-400 flex flex-col items-center justify-center pointer-events-none backdrop-blur-xs animate-in fade-in">
+            <Upload className="w-9 h-9 text-emerald-400 animate-bounce mb-2" />
+            <p className="text-xs font-semibold text-emerald-100">Drop files to upload directly to server</p>
+            <p className="text-[10px] text-emerald-300/80 font-mono">{remotePath}</p>
+          </div>
+        )}
+
+        {loadingRemote ? (
+          <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 font-mono">
+            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+            <p className="text-xs">Reading remote directory listing...</p>
+          </div>
+        ) : remoteFiles.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-2">
+            <HardDrive className="w-8 h-8 opacity-30 text-zinc-400" />
+            <h3 className="text-xs font-semibold text-zinc-300">Empty directory</h3>
+            <p className="text-[11px] text-zinc-500">Drag files from your PC or click Upload above to add files here.</p>
+          </div>
+        ) : (
+          <ScrollArea className="flex-1">
+            <Table>
+              <TableHeader className="bg-zinc-900/90 sticky top-0 border-b border-zinc-800 select-none">
+                <TableRow className="border-zinc-800 hover:bg-transparent">
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs">Filename</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-20 whitespace-nowrap">Filesize</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs w-28 whitespace-nowrap">Filetype</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-36 whitespace-nowrap">Last modified</TableHead>
+                  <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-20 whitespace-nowrap">Permissions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {remoteFiles.map((file) => {
+                  const isSelected = selectedRemote === file.name;
+                  const isDir = file.type === 'directory';
+
+                  return (
+                    <TableRow
+                      key={file.name}
+                      onClick={() => setSelectedRemote(isSelected ? null : file.name)}
+                      onDoubleClick={() => navigateRemote(file)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSelectedRemote(file.name);
+                        setRemoteContextMenu({ x: e.clientX, y: e.clientY, item: file });
+                      }}
+                      className={`border-zinc-800/60 cursor-pointer font-mono text-xs transition-colors ${
+                        isSelected
+                          ? 'bg-zinc-800/90 text-white'
+                          : 'hover:bg-zinc-900/40 text-zinc-300'
+                      }`}
+                    >
+                      <TableCell className="py-1 flex items-center gap-2">
+                        {isDir ? (
+                          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        ) : (
+                          <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        )}
+
+                        {renamingRemote === file.name ? (
+                          <Input
+                            value={newRemoteName}
+                            onChange={(e) => setNewRemoteName(e.target.value)}
+                            onBlur={handleRenameRemote}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameRemote();
+                              if (e.key === 'Escape') setRenamingRemote(null);
+                            }}
+                            autoFocus
+                            className="h-5 text-xs font-mono py-0 px-1 bg-zinc-900 border-zinc-700 text-white w-48"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span className={`truncate ${isDir ? 'font-medium text-amber-300' : ''}`}>
+                            {file.name}
+                          </span>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                        {isDir ? '—' : formatSize(file.size)}
+                      </TableCell>
+
+                      <TableCell className="py-1 text-zinc-400 text-xs whitespace-nowrap truncate max-w-[100px]">
+                        {getFileType(file.name, isDir)}
+                      </TableCell>
+
+                      <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
+                        {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
+                      </TableCell>
+
+                      <TableCell className="py-1 text-right text-zinc-500 text-[11px] whitespace-nowrap font-mono">
+                        {file.permissions
+                          ? `${file.permissions.user?.read ? 'r' : '-'}${file.permissions.user?.write ? 'w' : '-'}${file.permissions.user?.exec ? 'x' : '-'}`
+                          : '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+
+        {/* Remote Footer status */}
+        <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-500 shrink-0">
+          <span>
+            {remoteFiles.length} objects ({remoteFiles.filter((f) => f.type === 'directory').length} dirs, {remoteFiles.filter((f) => f.type === 'file').length} files)
+          </span>
+          {selectedRemote && (
+            <span className="text-sky-400 truncate max-w-[200px]">
+              Selected: {selectedRemote} (Double-click to download)
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div
       className="h-full w-full flex flex-col overflow-hidden bg-zinc-950 text-zinc-100 select-none relative font-sans"
@@ -400,15 +829,21 @@ export function SFTPManager({ tab }: Props) {
       onDrop={(e) => {
         e.preventDefault();
         setIsDragging(false);
-        handleLocalFilesPicked(e.dataTransfer.files);
+        if (viewMode === 'remote') {
+          handleDirectUploadFiles(e.dataTransfer.files);
+        } else {
+          handleLocalFilesPicked(e.dataTransfer.files);
+        }
       }}
     >
       {/* Drag overlay */}
       {isDragging && (
-        <div className="absolute inset-0 bg-zinc-950/90 border-2 border-dashed border-white z-50 flex items-center justify-center backdrop-blur-sm">
+        <div className="absolute inset-0 bg-zinc-950/90 border-2 border-dashed border-emerald-400 z-50 flex items-center justify-center backdrop-blur-sm">
           <div className="text-center space-y-2">
-            <Upload className="w-10 h-10 text-white mx-auto animate-bounce" />
-            <p className="text-sm font-semibold text-zinc-200">Drop files to stage in Local site</p>
+            <Upload className="w-10 h-10 text-emerald-400 mx-auto animate-bounce" />
+            <p className="text-sm font-semibold text-zinc-200">
+              {viewMode === 'remote' ? `Drop files to upload directly to ${remotePath}` : 'Drop files to stage in Local site'}
+            </p>
           </div>
         </div>
       )}
@@ -427,33 +862,55 @@ export function SFTPManager({ tab }: Props) {
 
         {/* Transfer Action Controls in Header */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => handleUploadLocalFile()}
-              disabled={!selectedLocal}
-              className={`h-5 px-2 text-[11px] gap-1 ${selectedLocal ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40' : 'text-zinc-600'}`}
-              title="Upload selected local file to server"
-            >
-              <ArrowRight className="w-3 h-3" />
-              <span>Upload &rarr;</span>
-            </Button>
+          {viewMode === 'dual' && (
+            <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleUploadLocalFile()}
+                disabled={!selectedLocal}
+                className={`h-5 px-2 text-[11px] gap-1 ${selectedLocal ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40' : 'text-zinc-600'}`}
+                title="Upload selected staged file to server"
+              >
+                <ArrowRight className="w-3 h-3" />
+                <span>Upload &rarr;</span>
+              </Button>
 
-            <Separator orientation="vertical" className="h-3 bg-zinc-800" />
+              <Separator orientation="vertical" className="h-3 bg-zinc-800" />
 
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => handleDownloadFile()}
-              disabled={!selectedRemote}
-              className={`h-5 px-2 text-[11px] gap-1 ${selectedRemote ? 'text-sky-400 hover:text-sky-300 hover:bg-sky-950/40' : 'text-zinc-600'}`}
-              title="Download selected remote file to local PC"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              <span>&larr; Download</span>
-            </Button>
-          </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleDownloadFile()}
+                disabled={!selectedRemote}
+                className={`h-5 px-2 text-[11px] gap-1 ${selectedRemote ? 'text-sky-400 hover:text-sky-300 hover:bg-sky-950/40' : 'text-zinc-600'}`}
+                title="Download selected remote file to local PC"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                <span>&larr; Download</span>
+              </Button>
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleViewMode}
+            className="h-6 px-2 text-[11px] border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white gap-1 font-sans"
+            title={viewMode === 'remote' ? 'Switch to Dual-Pane View (FileZilla style)' : 'Switch to Full Remote Explorer'}
+          >
+            {viewMode === 'remote' ? (
+              <>
+                <Columns className="w-3 h-3 text-amber-400" />
+                <span>Dual-Pane</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3 h-3 text-amber-400" />
+                <span>Full Remote</span>
+              </>
+            )}
+          </Button>
 
           <Button
             variant="outline"
@@ -514,330 +971,23 @@ export function SFTPManager({ tab }: Props) {
         </>
       )}
 
-      {/* Main Dual-Pane View: Resizable Left (Local) & Right (Remote) */}
+      {/* Main View: Full Remote Explorer (Default) or Resizable Dual-Pane */}
       <div className="flex-1 flex overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="flex-1 h-full w-full">
-          {/* ================= LEFT PANE: LOCAL SITE ================= */}
-          <ResizablePanel defaultSize={48} minSize={25} className="flex flex-col bg-zinc-950 border-r border-zinc-800/60 overflow-hidden">
-            {/* Local Path Toolbar */}
-            <div className="h-8 px-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <Laptop className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                <span className="text-[11px] font-mono text-zinc-400 font-semibold shrink-0">Local site:</span>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                  }}
-                  className="flex-1 min-w-0"
-                >
-                  <Input
-                    value={localPathInput}
-                    onChange={(e) => setLocalPathInput(e.target.value)}
-                    className="h-6 text-[11px] font-mono bg-zinc-950 border-zinc-800 text-zinc-200 px-2 py-0 truncate"
-                  />
-                </form>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setLocalPathInput('C:/Users/Local/')}
-                  className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
-                  title="Local Root"
-                >
-                  <Home className="w-3 h-3" />
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="h-6 px-2 text-[10px] border-zinc-800 text-zinc-300 hover:text-white gap-1"
-                  title="Browse files from your computer to stage here"
-                >
-                  <HardDrive className="w-3 h-3 text-sky-400" />
-                  <span>Browse PC...</span>
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(e) => handleLocalFilesPicked(e.target.files)}
-                />
-              </div>
-            </div>
-
-            {/* Local File Table */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {localFiles.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-2 select-none">
-                  <Laptop className="w-8 h-8 opacity-25 text-zinc-400" />
-                  <h3 className="text-xs font-semibold text-zinc-300">No files staged</h3>
-                  <p className="text-[11px] text-zinc-500 leading-relaxed max-w-[200px]">
-                    Drag files from your PC onto this panel, or click <span className="text-sky-400 font-mono">Browse PC...</span> to stage files for upload.
-                  </p>
-                </div>
-              ) : (
-              <ScrollArea className="flex-1">
-                <Table>
-                  <TableHeader className="bg-zinc-900/90 sticky top-0 border-b border-zinc-800 select-none">
-                    <TableRow className="border-zinc-800 hover:bg-transparent">
-                      <TableHead className="text-zinc-400 font-semibold h-7 text-xs">Filename</TableHead>
-                      <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-20 whitespace-nowrap">Filesize</TableHead>
-                      <TableHead className="text-zinc-400 font-semibold h-7 text-xs w-28 whitespace-nowrap">Filetype</TableHead>
-                      <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-36 whitespace-nowrap">Last modified</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {localFiles.map((file) => {
-                      const isSelected = selectedLocal === file.name;
-                      const isDir = file.type === 'directory';
-
-                      return (
-                        <TableRow
-                          key={file.name}
-                          onClick={() => setSelectedLocal(isSelected ? null : file.name)}
-                          onDoubleClick={() => handleUploadLocalFile(file)}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setSelectedLocal(file.name);
-                            setLocalContextMenu({ x: e.clientX, y: e.clientY, item: file });
-                          }}
-                          className={`border-zinc-800/60 cursor-pointer font-mono text-xs transition-colors ${
-                            isSelected
-                              ? 'bg-zinc-800/90 text-white'
-                              : 'hover:bg-zinc-900/40 text-zinc-300'
-                          }`}
-                        >
-                          <TableCell className="py-1 flex items-center gap-2">
-                            {isDir ? (
-                              <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            ) : (
-                              <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                            )}
-                            <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
-                              {file.name}
-                            </span>
-                          </TableCell>
-                          <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
-                            {isDir ? '—' : formatSize(file.size)}
-                          </TableCell>
-                          <TableCell className="py-1 text-zinc-400 text-xs whitespace-nowrap truncate max-w-[100px]">
-                            {getFileType(file.name, isDir)}
-                          </TableCell>
-                          <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
-                            {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-              )}
-
-              {/* Local Footer status */}
-              <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-500 shrink-0">
-                <span>{localFiles.length} local items</span>
-                {selectedLocal && (
-                  <span className="text-emerald-400 truncate max-w-[200px]">
-                    Selected: {selectedLocal} (Double-click to upload)
-                  </span>
-                )}
-              </div>
-            </div>
-          </ResizablePanel>
-
-          {/* ================= RESIZE HANDLE DIVIDER ================= */}
-          <ResizableHandle withHandle className="bg-zinc-800 hover:bg-zinc-600 transition-colors" />
-
-          {/* ================= RIGHT PANE: REMOTE SITE ================= */}
-          <ResizablePanel defaultSize={52} minSize={25} className="flex flex-col bg-zinc-950 overflow-hidden">
-            {/* Remote Path Toolbar */}
-            <div className="h-8 px-2.5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px] font-mono text-zinc-400 font-semibold shrink-0">Remote site:</span>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setRemotePath(remotePathInput);
-                  }}
-                  className="flex-1 min-w-0"
-                >
-                  <Input
-                    value={remotePathInput}
-                    onChange={(e) => setRemotePathInput(e.target.value)}
-                    className="h-6 text-[11px] font-mono bg-zinc-950 border-zinc-800 text-zinc-200 px-2 py-0 truncate"
-                  />
-                </form>
-
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={goUpRemote}
-                  disabled={remotePath === '/'}
-                  className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
-                  title="Go up one remote directory"
-                >
-                  <ArrowUp className="w-3 h-3" />
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setRemotePath('.')}
-                  className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
-                  title="Go to Home directory (~)"
-                >
-                  <Home className="w-3 h-3" />
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => loadRemoteFiles(remotePath)}
-                  className="text-zinc-400 hover:text-white h-6 px-1.5 text-xs gap-1"
-                  title="Refresh Remote Directory"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleMkdirRemote}
-                  className="border-zinc-800 text-zinc-300 hover:text-white h-6 px-2 text-xs gap-1"
-                  title="Create Directory on Server"
-                >
-                  <FolderPlus className="w-3 h-3" />
-                  <span>Create dir</span>
-                </Button>
-              </div>
-            </div>
-
-            {/* Remote File Table */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {loadingRemote ? (
-                <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 font-mono">
-                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
-                  <p className="text-xs">Reading remote directory listing...</p>
-                </div>
-              ) : remoteFiles.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-2">
-                  <HardDrive className="w-8 h-8 opacity-30 text-zinc-400" />
-                  <h3 className="text-xs font-semibold text-zinc-300">Empty directory</h3>
-                  <p className="text-[11px] text-zinc-500">Drag files from the left pane or PC to upload here.</p>
-                </div>
-              ) : (
-                <ScrollArea className="flex-1">
-                  <Table>
-                    <TableHeader className="bg-zinc-900/90 sticky top-0 border-b border-zinc-800 select-none">
-                      <TableRow className="border-zinc-800 hover:bg-transparent">
-                        <TableHead className="text-zinc-400 font-semibold h-7 text-xs">Filename</TableHead>
-                        <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-20 whitespace-nowrap">Filesize</TableHead>
-                        <TableHead className="text-zinc-400 font-semibold h-7 text-xs w-28 whitespace-nowrap">Filetype</TableHead>
-                        <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-36 whitespace-nowrap">Last modified</TableHead>
-                        <TableHead className="text-zinc-400 font-semibold h-7 text-xs text-right w-20 whitespace-nowrap">Permissions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {remoteFiles.map((file) => {
-                        const isSelected = selectedRemote === file.name;
-                        const isDir = file.type === 'directory';
-
-                        return (
-                          <TableRow
-                            key={file.name}
-                            onClick={() => setSelectedRemote(isSelected ? null : file.name)}
-                            onDoubleClick={() => navigateRemote(file)}
-                            onContextMenu={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setSelectedRemote(file.name);
-                              setRemoteContextMenu({ x: e.clientX, y: e.clientY, item: file });
-                            }}
-                            className={`border-zinc-800/60 cursor-pointer font-mono text-xs transition-colors ${
-                              isSelected
-                                ? 'bg-zinc-800/90 text-white'
-                               : 'hover:bg-zinc-900/40 text-zinc-300'
-                            }`}
-                          >
-                            <TableCell className="py-1 flex items-center gap-2">
-                              {isDir ? (
-                                <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                              ) : (
-                                <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                              )}
-
-                              {renamingRemote === file.name ? (
-                                <Input
-                                  value={newRemoteName}
-                                  onChange={(e) => setNewRemoteName(e.target.value)}
-                                  onBlur={handleRenameRemote}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleRenameRemote();
-                                    if (e.key === 'Escape') setRenamingRemote(null);
-                                  }}
-                                  autoFocus
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-5 text-xs font-mono bg-zinc-950 border-zinc-700 py-0 px-1.5"
-                                />
-                              ) : (
-                                <span className={`truncate ${isDir ? 'font-medium text-zinc-100' : ''}`}>
-                                  {file.name}
-                                </span>
-                              )}
-
-                              {isDir && (
-                                <ChevronRight className="w-3 h-3 opacity-40 ml-0.5 shrink-0" />
-                              )}
-                            </TableCell>
-
-                            <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
-                              {isDir ? '—' : formatSize(file.size)}
-                            </TableCell>
-
-                            <TableCell className="py-1 text-zinc-400 text-xs whitespace-nowrap truncate max-w-[100px]">
-                              {getFileType(file.name, isDir)}
-                            </TableCell>
-
-                            <TableCell className="py-1 text-right text-zinc-400 text-xs whitespace-nowrap font-mono">
-                              {file.modifiedAt ? formatDate(file.modifiedAt) : '—'}
-                            </TableCell>
-
-                            <TableCell className="py-1 text-right text-zinc-500 text-[11px] whitespace-nowrap font-mono">
-                              {file.permissions
-                                ? `${file.permissions.user?.read ? 'r' : '-'}${file.permissions.user?.write ? 'w' : '-'}${file.permissions.user?.exec ? 'x' : '-'}`
-                                : '—'}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              )}
-
-              {/* Remote Footer status */}
-              <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-500 shrink-0">
-                <span>
-                  {remoteFiles.length} objects ({remoteFiles.filter((f) => f.type === 'directory').length} dirs, {remoteFiles.filter((f) => f.type === 'file').length} files)
-                </span>
-                {selectedRemote && (
-                  <span className="text-sky-400 truncate max-w-[200px]">
-                    Selected: {selectedRemote} (Double-click to download)
-                  </span>
-                )}
-              </div>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+        {viewMode === 'remote' ? (
+          renderRemotePane()
+        ) : (
+          <ResizablePanelGroup direction="horizontal" className="flex-1 h-full w-full">
+            <ResizablePanel defaultSize={48} minSize={25} className="flex flex-col bg-zinc-950 border-r border-zinc-800/60 overflow-hidden">
+              {renderLocalPane()}
+            </ResizablePanel>
+            <ResizableHandle withHandle className="bg-zinc-800 hover:bg-zinc-600 transition-colors" />
+            <ResizablePanel defaultSize={52} minSize={25} className="flex flex-col bg-zinc-950 overflow-hidden">
+              {renderRemotePane()}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </div>
+
 
       {/* Local File Right-Click Context Menu */}
       {localContextMenu && (

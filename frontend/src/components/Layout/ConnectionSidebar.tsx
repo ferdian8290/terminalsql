@@ -282,7 +282,10 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
 
   const sshConns = useMemo(() => filtered.filter((c) => c.type === 'ssh'), [filtered]);
   const dbConns = useMemo(() => filtered.filter((c) => c.type === 'database'), [filtered]);
-  const sftpConns = useMemo(() => filtered.filter((c) => c.type === 'sftp'), [filtered]);
+  const sftpConns = useMemo(
+    () => filtered.filter((c) => c.type === 'sftp' || c.type === 'ssh'),
+    [filtered]
+  );
 
   const currentCategoryConns = useMemo(() =>
     activeCategory === 'database' ? dbConns : activeCategory === 'ssh' ? sshConns : sftpConns,
@@ -543,7 +546,9 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
           }}
           onDoubleClick={(e) => {
             e.stopPropagation();
-            if (isSsh) {
+            if (activeCategory === 'sftp') {
+              handleOpenSFTP(conn);
+            } else if (isSsh) {
               handleOpenTerminal(conn);
             } else if (isDb) {
               if (isConnected) {
@@ -601,12 +606,12 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
             )}
 
             <div className="shrink-0 flex items-center justify-center">
-              {isDb ? (
+              {activeCategory === 'sftp' ? (
+                <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-amber-400' : 'text-amber-400/80'}`} />
+              ) : isDb ? (
                 getDatabaseIcon(conn)
-              ) : isSsh ? (
-                <Terminal className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-emerald-400' : 'text-zinc-400'}`} />
               ) : (
-                <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-amber-400' : 'text-zinc-400'}`} />
+                <Terminal className={`w-3.5 h-3.5 shrink-0 ${isConnected ? 'text-emerald-400' : 'text-zinc-400'}`} />
               )}
             </div>
 
@@ -639,7 +644,9 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (isSsh) {
+                      if (activeCategory === 'sftp') {
+                        handleOpenSFTP(conn, e);
+                      } else if (isSsh) {
                         handleOpenTerminal(conn, e);
                       } else if (isDb) {
                         if (isConnected) {
@@ -659,7 +666,9 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                       }
                     }}
                     className={`h-5 w-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all ${
-                      isDb && isConnected
+                      activeCategory === 'sftp'
+                        ? 'text-amber-400 hover:text-white hover:bg-amber-600/30'
+                        : isDb && isConnected
                         ? 'text-foreground hover:bg-muted'
                         : isDb
                         ? 'text-purple-400 hover:text-white hover:bg-purple-600/30'
@@ -668,7 +677,9 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                         : 'text-amber-400 hover:text-white hover:bg-amber-600/30'
                     }`}
                   >
-                    {isDb && isConnected ? (
+                    {activeCategory === 'sftp' ? (
+                      <FolderOpen className="w-2.5 h-2.5" />
+                    ) : isDb && isConnected ? (
                       isTreeExpanded ? (
                         <ChevronDown className="w-3 h-3 text-foreground" />
                       ) : (
@@ -682,7 +693,7 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" align="end" sideOffset={4} className="text-[10px] font-medium py-0.5 px-1.5 font-sans pointer-events-none shadow-md z-50">
-                  <p>{isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}</p>
+                  <p>{activeCategory === 'sftp' ? 'Browse SFTP' : isDb && isConnected ? (isTreeExpanded ? 'Collapse' : 'Expand') : isConnected ? 'Reconnect' : 'Connect'}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1030,26 +1041,24 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
             </TooltipProvider>
           )}
 
-          {sftpConns.length > 0 && (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    onClick={() => {
-                      setActiveCategory('sftp');
-                      onToggleCollapse();
-                    }}
-                    className="w-7 h-7 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-400 cursor-pointer hover:border-amber-500/50"
-                  >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>SFTP</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  onClick={() => {
+                    setActiveCategory('sftp');
+                    onToggleCollapse();
+                  }}
+                  className="w-7 h-7 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-400 cursor-pointer hover:border-amber-500/50"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>SFTP</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {showImportExport && (
@@ -1197,21 +1206,19 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
           <span className="text-[9.5px] text-muted-foreground/80 font-mono">({sshConns.length})</span>
         </button>
 
-        {sftpConns.length > 0 && (
-          <button
-            onClick={() => setActiveCategory('sftp')}
-            className={`flex items-center gap-1.5 pb-1.5 pt-0.5 px-2 text-[11px] font-medium border-b-2 transition-all cursor-pointer ${
-              activeCategory === 'sftp'
-                ? 'border-amber-500 text-foreground font-semibold'
+        <button
+          onClick={() => setActiveCategory('sftp')}
+          className={`flex items-center gap-1.5 pb-1.5 pt-0.5 px-2 text-[11px] font-medium border-b-2 transition-all cursor-pointer ${
+            activeCategory === 'sftp'
+              ? 'border-amber-500 text-foreground font-semibold'
               : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-            title="SFTP Storage"
-          >
-            <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>SFTP</span>
-            <span className="text-[9.5px] text-muted-foreground/80 font-mono">({sftpConns.length})</span>
-          </button>
-        )}
+          }`}
+          title="SFTP Storage"
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>SFTP</span>
+          <span className="text-[9.5px] text-muted-foreground/80 font-mono">({sftpConns.length})</span>
+        </button>
       </div>
 
       {/* Filter / Search Bar */}
@@ -1610,14 +1617,47 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
                 onClick={() => {
                   const c = contextMenu.conn;
                   setContextMenu(null);
-                  if (c.type === 'ssh') handleOpenTerminal(c);
+                  if (activeCategory === 'sftp') handleOpenSFTP(c);
+                  else if (c.type === 'ssh') handleOpenTerminal(c);
                   else if (c.type === 'database') handleOpenDatabase(c);
                   else if (c.type === 'sftp') handleOpenSFTP(c);
                 }}
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-zinc-800 hover:text-white transition-colors text-left"
               >
-                <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
-                <span>{tabs.some((t) => t.connectionId === contextMenu.conn.id) ? 'Reconnect' : 'Connect'}</span>
+                {activeCategory === 'sftp' ? (
+                  <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+                )}
+                <span>{activeCategory === 'sftp' ? 'Open SFTP' : tabs.some((t) => t.connectionId === contextMenu.conn.id) ? 'Reconnect' : 'Connect'}</span>
+              </button>
+            )}
+
+            {/* Quick cross-launch between SSH Terminal and SFTP */}
+            {contextMenu.conn.type === 'ssh' && activeCategory !== 'sftp' && (
+              <button
+                onClick={() => {
+                  const c = contextMenu.conn;
+                  setContextMenu(null);
+                  handleOpenSFTP(c);
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                <span>Open SFTP Browser</span>
+              </button>
+            )}
+            {contextMenu.conn.type === 'ssh' && activeCategory === 'sftp' && (
+              <button
+                onClick={() => {
+                  const c = contextMenu.conn;
+                  setContextMenu(null);
+                  handleOpenTerminal(c);
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+              >
+                <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Open SSH Terminal</span>
               </button>
             )}
 
