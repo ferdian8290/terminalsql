@@ -31,7 +31,7 @@ function formatRights(rights: any): string {
   return String(rights);
 }
 
-async function getSftpClient(conn: any, creds: any, userId?: string, retries = 1): Promise<SftpSessionHandle> {
+async function getSftpClient(conn: any, creds: any, userId?: string, retries = 2): Promise<SftpSessionHandle> {
   const sftp = new SftpClient();
   let bastionClient: any;
   let forwardedStream: any;
@@ -53,16 +53,19 @@ async function getSftpClient(conn: any, creds: any, userId?: string, retries = 1
       password: creds.password,
       privateKey: creds.privateKey,
       passphrase: creds.passphrase,
-      readyTimeout: 15000,
+      readyTimeout: 20000,
+      keepaliveInterval: 10000,
     });
   } catch (err: any) {
     try { await sftp.end(); } catch {}
     try { bastionClient?.end(); } catch {}
 
-    const isReset = err.code === 'ECONNRESET' || (typeof err.message === 'string' && err.message.includes('ECONNRESET'));
-    if (retries > 0 && isReset) {
-      // Server was under burst connection load. Back off briefly and retry once.
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    const errMsg = `${err?.code || ''} ${err?.message || ''}`;
+    const isTransient = /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|read ECONNRESET|connect ECONNRESET/i.test(errMsg);
+    if (retries > 0 && isTransient) {
+      // Server was under burst load or transient reset. Exponential backoff and retry.
+      const delay = (3 - retries) * 600;
+      await new Promise((resolve) => setTimeout(resolve, delay));
       return getSftpClient(conn, creds, userId, retries - 1);
     }
     throw err;

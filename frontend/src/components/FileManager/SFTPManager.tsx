@@ -14,6 +14,7 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -119,6 +120,11 @@ export function SFTPManager({ tab }: Props) {
 
   const hasLoadedRemoteRef = useRef(false);
   const hasLoadedLocalRef = useRef(false);
+  const isActiveRef = useRef(isActive);
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
 
   // Remote site states (defaults to user home directory '.')
   const [remotePath, setRemotePath] = useState('.');
@@ -288,6 +294,7 @@ export function SFTPManager({ tab }: Props) {
 
   // Load Host Local Files
   async function loadLocalFiles(targetPath?: string) {
+    if (loadingLocal) return;
     setLoadingLocal(true);
     try {
       const res = await api.sftp.localList(targetPath);
@@ -314,7 +321,7 @@ export function SFTPManager({ tab }: Props) {
       addLog(`Status: Directory listing of "${safePath}" successful (${safeFiles.length} items)`);
     } catch (err: any) {
       addLog(`Error: Local directory listing failed: ${err.message || 'Unknown error'}`);
-      if (isActive) {
+      if (isActiveRef.current) {
         toast.error(`Failed to read local folder: ${err.message || 'Unknown error'}`);
       }
     } finally {
@@ -324,6 +331,7 @@ export function SFTPManager({ tab }: Props) {
 
   // Load Remote SFTP Files
   async function loadRemoteFiles(p: string) {
+    if (loadingRemote) return;
     setLoadingRemote(true);
     addLog(`Command: ls "${p}"`);
     try {
@@ -344,7 +352,7 @@ export function SFTPManager({ tab }: Props) {
       addLog(`Status: Directory listing of "${resolvedPath}" successful (${sorted.length} items)`);
     } catch (err: any) {
       addLog(`Error: Remote directory listing failed: ${err.message || 'Unknown error'}`);
-      if (isActive) {
+      if (isActiveRef.current) {
         toast.error(`Failed to load remote directory: ${err.message || 'Unknown error'}`);
       }
     } finally {
@@ -929,10 +937,11 @@ export function SFTPManager({ tab }: Props) {
             variant="ghost"
             size="icon-sm"
             onClick={() => loadLocalFiles(localPath)}
+            disabled={loadingLocal}
             className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
             title="Refresh Local Directory"
           >
-            <RefreshCw className="w-3 h-3" />
+            <RefreshCw className={cn("w-3 h-3", loadingLocal && "animate-spin text-sky-400")} />
           </Button>
         </div>
 
@@ -992,15 +1001,10 @@ export function SFTPManager({ tab }: Props) {
           <div className="w-full min-w-full">
             <table
               className="w-full min-w-full caption-bottom text-sm border-collapse select-none"
-              style={{
-                minWidth: '100%',
-                width: localColWidths.name
-                  ? `${(localColWidths.name || 200) + localColWidths.size + localColWidths.type + localColWidths.modified}px`
-                  : '100%',
-              }}
+              style={{ minWidth: '100%' }}
             >
               <colgroup>
-                <col className="w-auto" style={localColWidths.name ? { width: `${localColWidths.name}px` } : undefined} />
+                <col className="w-auto" style={{ minWidth: `${localColWidths.name || 180}px` }} />
                 <col style={{ width: `${localColWidths.size}px` }} />
                 <col style={{ width: `${localColWidths.type}px` }} />
                 <col style={{ width: `${localColWidths.modified}px` }} />
@@ -1008,9 +1012,9 @@ export function SFTPManager({ tab }: Props) {
               <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
                 <tr className="border-zinc-800 hover:bg-transparent">
                   <th
-                    style={localColWidths.name ? { width: `${localColWidths.name}px` } : undefined}
+                    style={{ minWidth: `${localColWidths.name || 180}px` }}
                     onClick={() => handleLocalSort('name')}
-                    className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    className="w-auto text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
                     title="Sort by Filename"
                   >
                     <div className="flex items-center gap-1.5 pr-3 overflow-hidden">
@@ -1265,10 +1269,11 @@ export function SFTPManager({ tab }: Props) {
             variant="ghost"
             size="icon-sm"
             onClick={() => loadRemoteFiles(remotePath)}
+            disabled={loadingRemote}
             className="text-zinc-400 hover:text-white h-6 w-6 shrink-0"
             title="Refresh Remote Directory"
           >
-            <RefreshCw className="w-3 h-3" />
+            <RefreshCw className={cn("w-3 h-3", loadingRemote && "animate-spin text-sky-400")} />
           </Button>
         </div>
 
@@ -1369,15 +1374,10 @@ export function SFTPManager({ tab }: Props) {
           <div className="w-full min-w-full">
             <table
               className="w-full min-w-full caption-bottom text-sm border-collapse select-none"
-              style={{
-                minWidth: '100%',
-                width: remoteColWidths.name
-                  ? `${(remoteColWidths.name || 200) + remoteColWidths.size + remoteColWidths.type + remoteColWidths.modified + remoteColWidths.perm}px`
-                  : '100%',
-              }}
+              style={{ minWidth: '100%' }}
             >
               <colgroup>
-                <col className="w-auto" style={remoteColWidths.name ? { width: `${remoteColWidths.name}px` } : undefined} />
+                <col className="w-auto" style={{ minWidth: `${remoteColWidths.name || 180}px` }} />
                 <col style={{ width: `${remoteColWidths.size}px` }} />
                 <col style={{ width: `${remoteColWidths.type}px` }} />
                 <col style={{ width: `${remoteColWidths.modified}px` }} />
@@ -1386,9 +1386,9 @@ export function SFTPManager({ tab }: Props) {
               <thead className="bg-zinc-900 sticky top-0 z-20 border-b border-zinc-800 select-none shadow-sm [&_tr]:border-b">
                 <tr className="border-zinc-800 hover:bg-transparent">
                   <th
-                    style={remoteColWidths.name ? { width: `${remoteColWidths.name}px` } : undefined}
+                    style={{ minWidth: `${remoteColWidths.name || 180}px` }}
                     onClick={() => handleRemoteSort('name')}
-                    className="text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
+                    className="w-auto text-zinc-400 font-semibold h-7 text-xs text-left px-2 relative group select-none cursor-pointer hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors"
                     title="Sort by Filename"
                   >
                     <div className="flex items-center gap-1.5 pr-3 overflow-hidden">

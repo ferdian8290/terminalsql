@@ -139,9 +139,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed
-            .filter((t: any) => t && t.id && t.type)
-            .map((t: any) => ({ ...t, connection: t.connection || {} }));
+          // Cleanly deduplicate open tabs by connectionId + type to prevent multiple duplicate sessions hammering servers
+          const seen = new Set<string>();
+          const deduped: Tab[] = [];
+          for (const t of parsed) {
+            if (t && t.id && t.type) {
+              const key = `${t.connectionId || t.id}-${t.type}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                deduped.push({ ...t, connection: t.connection || {} });
+              }
+            }
+          }
+          return deduped;
         }
       }
     } catch {}
@@ -178,6 +188,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   openTab: (tabData) => {
+    // If a tab for this connection and type is already open, focus it seamlessly instead of creating duplicates
+    const existing = get().tabs.find(
+      (t) => t.connectionId === tabData.connectionId && t.type === tabData.type
+    );
+    if (existing) {
+      set({ activeTabId: existing.id });
+      try {
+        localStorage.setItem('terminalsql_active_tab', existing.id);
+      } catch {}
+      return;
+    }
+
     const id = `${tabData.connectionId}-${tabData.type}-${Date.now()}`;
     const tab: Tab = { id, ...tabData };
     const newTabs = [...get().tabs, tab];

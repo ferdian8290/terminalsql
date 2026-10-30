@@ -98,7 +98,7 @@ async function bootstrap() {
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',
-    version: '1.5.18',
+    version: '1.5.19',
     timestamp: new Date().toISOString(),
   }));
 
@@ -114,12 +114,24 @@ async function bootstrap() {
       root: frontendDist,
       prefix: '/',
       wildcard: false,
+      setHeaders: (res, pathName) => {
+        if (pathName.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        } else if (pathName.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
     });
 
     app.setNotFoundHandler((req, reply) => {
       if (req.raw.url?.startsWith('/api')) {
         reply.status(404).send({ error: 'Endpoint not found' });
       } else {
+        reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+        reply.header('Pragma', 'no-cache');
+        reply.header('Expires', '0');
         reply.sendFile('index.html');
       }
     });

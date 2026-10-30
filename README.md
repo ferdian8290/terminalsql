@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.18-purple)
+![Version](https://img.shields.io/badge/Version-1.5.19-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -294,7 +294,13 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 
 ## Changelog & Version History
 
-### [v1.5.18] - 2026-10-30
+### [v1.5.19] - 2026-10-30
+- **Guaranteed Full-Width Table Layout & Zero-Gap Columns**: Enforced `minWidth: '100%'` with flexible `w-auto` Filename column absorption. Column dividers stay resizable while the table seamlessly hugs the right viewport edge under the toolbar across any monitor width, eliminating empty void spaces.
+- **Smart Session Tab Deduplication & Auto-Cleanup**: Prevented duplicate tabs from spawning when clicking existing connections in the sidebar. Automatically deduplicates historical tabs saved in `localStorage` upon page load, stopping concurrent SSH/SFTP connection storms against remote servers.
+- **Resilient Multi-Attempt SFTP Connection Recovery**: Upgraded `getSftpClient` in `backend/src/modules/sftp/routes.ts` with 3 connection attempts, exponential backoff, and robust regex detection covering `ECONNRESET`, `read ECONNRESET`, `connect ECONNRESET`, `ETIMEDOUT`, and `ECONNREFUSED`.
+- **SFTP Refresh Toolbar Feedback & Concurrency Guard**: Added active spinner feedback (`animate-spin text-sky-400`) and disabled states to toolbar refresh buttons in both local and remote panes, preventing duplicate concurrent directory fetches.
+- **Native Browser Cache Prevention for Index Bundle**: Configured HTTP `Cache-Control: no-cache, no-store, must-revalidate` for `index.html` in Fastify static file server, ensuring refreshed native browsers instantly load the latest version without getting stuck on stale cached bundles.
+- **Universal Monaco Worker Environment Scope**: Broadened `MonacoEnvironment` configuration across `self`, `window`, and `globalThis` to ensure Monaco Editor background workers are cleanly resolved in all runtime contexts.
 - **True 100% Full-Width Explorer Table**: Fixed intrinsic shrink-to-fit container constraints (`inline-block` replaced by `w-full min-w-full block`), ensuring the remote and local file explorer table stretches completely to the right edge of any screen resolution without truncation or blank voids.
 - **De-Duplicated SSH & SFTP Sidebar Categories**: Separated SSH Terminal connections and standalone SFTP connections in the left navigation sidebar. SSH servers now live exclusively under the `Terminal` category (with on-demand right-click `Open SFTP Browser` action), eliminating redundant duplicate entries in the `SFTP` tab.
 - **Synchronized Offline Docker Image Archive**: Built and packaged `terminalsql-backend:latest` and `terminalsql-frontend:latest` into `./docker-images/terminalsql-images.tar.gz` (153MB) with updated image hashes, fully prepared for air-gapped on-premise container deployment alongside the native systemd stack.

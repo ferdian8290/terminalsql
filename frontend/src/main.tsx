@@ -15,7 +15,7 @@ import './index.css'
 // Configure Monaco Environment Web Workers for Vite
 // Offloads tokenization, validation, and syntax parsing to background workers
 // eliminating main UI thread freezes and console fallback warnings
-(window as any).MonacoEnvironment = {
+const monacoEnv = {
   getWorker(_: any, label: string) {
     if (label === 'json') return new jsonWorker();
     if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker();
@@ -24,6 +24,9 @@ import './index.css'
     return new editorWorker();
   },
 };
+(self as any).MonacoEnvironment = monacoEnv;
+(window as any).MonacoEnvironment = monacoEnv;
+(globalThis as any).MonacoEnvironment = monacoEnv;
 
 // Configure @monaco-editor/react to use locally bundled monaco-editor
 // This ensures 100% offline functionality and avoids CDN blocks / CSP restrictions
