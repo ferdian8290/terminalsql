@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.8-purple)
+![Version](https://img.shields.io/badge/Version-1.5.9-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,13 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.9] - 2026-10-30
+- **Live Remote File Preview**: Added in-browser live preview for files in the SFTP manager without downloading to PC. Supports `.csv`, `.tsv`, `.txt`, `.log`, `.json`, `.sql`, `.conf`, `.env`, `.sh`, `.yml`, `.yaml`, and `.xml`.
+- **Interactive CSV Grid Viewer**: Parsed CSV and TSV files into an interactive spreadsheet table grid with live row filtering search, column headers, and row numbering, alongside raw text view toggle.
+- **On-the-Fly Archive Inspector**: Inspected `.tar`, `.tar.gz`, and `.tgz` archives directly on the server without extraction, allowing file-by-file exploration and live viewing of text/csv contents inside archives.
+- **In-Memory Gzip Stream Decompression**: Decompressed `.gz` single files on-the-fly via streaming without disk I/O.
+- **Chunked Stream Safety Limit**: Enforced a streaming preview limit (default 2MB) to protect server memory and prevent browser freezing on large files.
 
 ### [v1.5.8] - 2026-10-30
 - **Seamless SFTP Integration & Persistent Tab**: Always displayed the dedicated SFTP category tab in the left sidebar switcher (`Database`, `Terminal`, `SFTP`) regardless of manual connection type, automatically including all SSH hosts as immediate SFTP storage targets.

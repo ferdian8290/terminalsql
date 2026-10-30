@@ -109,5 +109,35 @@ export const api = {
       request('/sftp/mkdir', { method: 'POST', body: JSON.stringify({ connectionId, path }) }),
     rename: (connectionId: string, oldPath: string, newPath: string) =>
       request('/sftp/rename', { method: 'POST', body: JSON.stringify({ connectionId, oldPath, newPath }) }),
+    preview: (connectionId: string, path: string, entry?: string, maxBytes?: number) => {
+      let url = `/sftp/preview?connectionId=${connectionId}&path=${encodeURIComponent(path)}`;
+      if (entry) url += `&entry=${encodeURIComponent(entry)}`;
+      if (maxBytes) url += `&maxBytes=${maxBytes}`;
+      return request<{
+        name: string;
+        path: string;
+        entryPath?: string;
+        size: number;
+        totalSize: number;
+        content: string;
+        isTruncated: boolean;
+        isCompressed?: boolean;
+        isArchiveEntry?: boolean;
+      }>(url);
+    },
+    archiveList: (connectionId: string, path: string) =>
+      request<{
+        name: string;
+        path: string;
+        totalSize: number;
+        entryCount: number;
+        entries: Array<{
+          name: string;
+          size: number;
+          mtime: number;
+          type: 'file' | 'directory';
+          previewSnippet?: string;
+        }>;
+      }>(`/sftp/archive-list?connectionId=${connectionId}&path=${encodeURIComponent(path)}`),
   },
 };

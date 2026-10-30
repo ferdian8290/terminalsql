@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Folder, File, Upload, Download, Trash2, FolderPlus,
-  Edit2, RefreshCw, ChevronRight, ArrowUp, Home, Loader2, HardDrive,
-  Terminal, Laptop, ArrowRight, ArrowLeft, Copy, Columns, Maximize2
+  Edit2, RefreshCw, ArrowUp, Home, Loader2, HardDrive,
+  Terminal, Laptop, ArrowRight, ArrowLeft, Copy, Columns, Maximize2, Eye
 } from 'lucide-react';
+import { FilePreviewModal } from './FilePreviewModal';
 import { api } from '@/utils/api';
 import { useAppStore, Tab } from '@/store/appStore';
 import toast from 'react-hot-toast';
@@ -115,6 +116,11 @@ export function SFTPManager({ tab }: Props) {
     return (localStorage.getItem('terminalsql_sftp_view_mode') as 'remote' | 'dual') || 'remote';
   });
   const [isDraggingOverRemote, setIsDraggingOverRemote] = useState(false);
+  const [previewModal, setPreviewModal] = useState<{
+    isOpen: boolean;
+    filePath: string;
+    fileName: string;
+  }>({ isOpen: false, filePath: '', fileName: '' });
 
   const toggleViewMode = () => {
     setViewMode((prev) => {
@@ -262,12 +268,35 @@ export function SFTPManager({ tab }: Props) {
     }
   }
 
+  function canPreviewFile(name: string): boolean {
+    const lower = name.toLowerCase();
+    const previewExtensions = [
+      '.csv', '.tsv', '.txt', '.log', '.json', '.sql', '.sh', '.bash',
+      '.env', '.conf', '.yaml', '.yml', '.xml', '.md', '.js', '.ts',
+      '.py', '.tar', '.tar.gz', '.tgz', '.gz'
+    ];
+    return previewExtensions.some((ext) => lower.endsWith(ext));
+  }
+
+  function handlePreviewFile(fileName?: string) {
+    const target = fileName || selectedRemote;
+    if (!target) return;
+    const fullPath = remotePath === '/' ? `/${target}` : `${remotePath}/${target}`;
+    setPreviewModal({
+      isOpen: true,
+      filePath: fullPath,
+      fileName: target,
+    });
+  }
+
   function navigateRemote(file: RemoteFileEntry) {
     if (file.type === 'directory') {
       const newPath = remotePath === '/' ? `/${file.name}` : `${remotePath}/${file.name}`;
       setRemotePath(newPath);
+    } else if (canPreviewFile(file.name)) {
+      handlePreviewFile(file.name);
     } else {
-      // If file double clicked on remote -> download it!
+      // If binary file double clicked on remote -> download it!
       handleDownloadFile(file.name);
     }
   }
@@ -1058,17 +1087,31 @@ export function SFTPManager({ tab }: Props) {
             </div>
 
             {remoteContextMenu.item.type === 'file' && (
-              <button
-                onClick={() => {
-                  const name = remoteContextMenu.item.name;
-                  setRemoteContextMenu(null);
-                  handleDownloadFile(name);
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download to PC
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    const name = remoteContextMenu.item.name;
+                    setRemoteContextMenu(null);
+                    handlePreviewFile(name);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Quick View / Preview</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const name = remoteContextMenu.item.name;
+                    setRemoteContextMenu(null);
+                    handleDownloadFile(name);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left text-sky-400 hover:bg-sky-950/40 hover:text-sky-300 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download to PC</span>
+                </button>
+              </>
             )}
 
             <button
@@ -1171,6 +1214,17 @@ export function SFTPManager({ tab }: Props) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Live Preview Modal for CSV, Text, and Archive Files */}
+      {previewModal.isOpen && (
+        <FilePreviewModal
+          isOpen={previewModal.isOpen}
+          onClose={() => setPreviewModal({ isOpen: false, filePath: '', fileName: '' })}
+          connectionId={tab.connectionId}
+          filePath={previewModal.filePath}
+          fileName={previewModal.fileName}
+        />
       )}
     </div>
   );

@@ -7,6 +7,8 @@ import { authenticate } from '../../middleware/auth.js';
 import { decrypt } from '../../utils/crypto.js';
 import { resolveBastionConfig, createBastionClient, openForwardedStream } from '../../utils/bastion.js';
 import { pipeline } from 'stream/promises';
+import zlib from 'zlib';
+import { readStreamLimited, parseTarEntries, extractTarEntryContent } from './archiveHelper.js';
 
 interface SftpSessionHandle {
   sftp: SftpClient;
@@ -215,6 +217,133 @@ export async function sftpRoutes(app: FastifyInstance) {
     try {
       await sftp.rename(oldPath, newPath);
       return reply.send({ message: 'Renamed successfully' });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // GET /api/sftp/preview?connectionId=&path=&entry=&maxBytes=
+  app.get('/preview', async (request, reply) => {
+    const db = getDb();
+    const { connectionId, path, entry, maxBytes } = request.query as {
+      connectionId: string;
+      path: string;
+      entry?: string;
+      maxBytes?: string;
+    };
+
+    if (!path) return reply.status(400).send({ error: 'Path is required' });
+
+    const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
+    if (!conn) return reply.status(404).send({ error: 'Connection not found' });
+
+    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+
+    const limitBytes = Math.min(parseInt(maxBytes || '', 10) || 2 * 1024 * 1024, 5 * 1024 * 1024);
+
+    try {
+      const stat = await sftp.stat(path);
+      const filename = path.split('/').pop() || 'file';
+      const isTarGz = path.endsWith('.tar.gz') || path.endsWith('.tgz');
+      const isTar = path.endsWith('.tar');
+      const isGz = path.endsWith('.gz') && !isTarGz;
+
+      // Case 1: Viewing a specific file inside a .tar or .tar.gz archive
+      if ((isTarGz || isTar) && entry) {
+        let stream: any = sftp.createReadStream(path);
+        if (isTarGz) {
+          stream = stream.pipe(zlib.createGunzip());
+        }
+        const extracted = await extractTarEntryContent(stream, entry, limitBytes);
+        if (!extracted) {
+          return reply.status(404).send({ error: `File "${entry}" not found inside archive` });
+        }
+        return reply.send({
+          name: entry.split('/').pop(),
+          entryPath: entry,
+          archivePath: path,
+          size: extracted.size,
+          totalSize: stat.size,
+          content: extracted.content,
+          isTruncated: extracted.isTruncated,
+          isArchiveEntry: true,
+        });
+      }
+
+      // Case 2: Reading a compressed single file (e.g. data.csv.gz or app.log.gz)
+      if (isGz) {
+        const rawStream = sftp.createReadStream(path);
+        const decompressedStream = rawStream.pipe(zlib.createGunzip());
+        const { content, isTruncated, bytesRead } = await readStreamLimited(decompressedStream, limitBytes);
+        return reply.send({
+          name: filename,
+          path,
+          size: bytesRead,
+          totalSize: stat.size,
+          content,
+          isTruncated,
+          isCompressed: true,
+        });
+      }
+
+      // Case 3: Plain text / CSV / JSON / code file
+      const rawStream = sftp.createReadStream(path);
+      const { content, isTruncated, bytesRead } = await readStreamLimited(rawStream, limitBytes);
+      return reply.send({
+        name: filename,
+        path,
+        size: bytesRead,
+        totalSize: stat.size,
+        content,
+        isTruncated,
+        isCompressed: false,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to preview file: ${err.message}` });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // GET /api/sftp/archive-list?connectionId=&path=
+  app.get('/archive-list', async (request, reply) => {
+    const db = getDb();
+    const { connectionId, path } = request.query as { connectionId: string; path: string };
+
+    if (!path) return reply.status(400).send({ error: 'Path is required' });
+
+    const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
+    if (!conn) return reply.status(404).send({ error: 'Connection not found' });
+
+    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+
+    try {
+      const stat = await sftp.stat(path);
+      const filename = path.split('/').pop() || 'archive';
+      const isTarGz = path.endsWith('.tar.gz') || path.endsWith('.tgz');
+      const isTar = path.endsWith('.tar');
+
+      if (!isTarGz && !isTar) {
+        return reply.status(400).send({ error: 'Unsupported archive format. Only .tar, .tar.gz, and .tgz are supported for inspection.' });
+      }
+
+      let stream: any = sftp.createReadStream(path);
+      if (isTarGz) {
+        stream = stream.pipe(zlib.createGunzip());
+      }
+
+      const entries = await parseTarEntries(stream, 500);
+      return reply.send({
+        name: filename,
+        path,
+        totalSize: stat.size,
+        entryCount: entries.length,
+        entries,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to list archive: ${err.message}` });
     } finally {
       await cleanup();
     }
