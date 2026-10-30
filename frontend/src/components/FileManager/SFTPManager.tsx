@@ -113,6 +113,12 @@ function getFileType(name: string, isDir: boolean): string {
 
 export function SFTPManager({ tab }: Props) {
   const openTab = useAppStore((s) => s.openTab);
+  const activeTabId = useAppStore((s) => s.activeTabId);
+  const splitTabId = useAppStore((s) => s.splitTabId);
+  const isActive = tab.id === activeTabId || tab.id === splitTabId;
+
+  const hasLoadedRemoteRef = useRef(false);
+  const hasLoadedLocalRef = useRef(false);
 
   // Remote site states (defaults to user home directory '.')
   const [remotePath, setRemotePath] = useState('.');
@@ -277,21 +283,40 @@ export function SFTPManager({ tab }: Props) {
     setLogs((prev) => [...prev.slice(-40), msg]);
   }
 
+  // Track fetched path to avoid duplicate fetch loops on mount
+  const fetchedPathRef = useRef<string | null>(null);
+
   // Load Host Local Files
   async function loadLocalFiles(targetPath?: string) {
     setLoadingLocal(true);
     try {
       const res = await api.sftp.localList(targetPath);
-      setLocalPath(res.path);
-      setLocalPathInput(res.path);
-      setLocalParentPath(res.parentPath);
-      setLocalFiles(res.files);
-      setLocalStats(res.stats);
+      const safePath = res?.path || targetPath || '/';
+      const safeFiles = Array.isArray(res?.files) ? res.files : [];
+      setLocalPath(safePath);
+      setLocalPathInput(safePath);
+      setLocalParentPath(res?.parentPath || null);
+      setLocalFiles(safeFiles);
+      if (res?.stats) {
+        setLocalStats({
+          fileCount: res.stats.fileCount ?? safeFiles.filter((f) => f.type === 'file').length,
+          dirCount: res.stats.dirCount ?? safeFiles.filter((f) => f.type === 'directory').length,
+          totalBytes: res.stats.totalBytes ?? safeFiles.reduce((acc, f) => acc + (f.size || 0), 0),
+        });
+      } else {
+        setLocalStats({
+          fileCount: safeFiles.filter((f) => f.type === 'file').length,
+          dirCount: safeFiles.filter((f) => f.type === 'directory').length,
+          totalBytes: safeFiles.reduce((acc, f) => acc + (f.size || 0), 0),
+        });
+      }
       setSelectedLocal(null);
-      addLog(`Status: Directory listing of "${res.path}" successful (${res.files.length} items)`);
+      addLog(`Status: Directory listing of "${safePath}" successful (${safeFiles.length} items)`);
     } catch (err: any) {
-      addLog(`Error: Local directory listing failed: ${err.message}`);
-      toast.error(`Failed to read local folder: ${err.message}`);
+      addLog(`Error: Local directory listing failed: ${err.message || 'Unknown error'}`);
+      if (isActive) {
+        toast.error(`Failed to read local folder: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setLoadingLocal(false);
     }
@@ -303,35 +328,50 @@ export function SFTPManager({ tab }: Props) {
     addLog(`Command: ls "${p}"`);
     try {
       const res = await api.sftp.list(tab.connectionId, p);
-      const resolvedPath = res.path || p;
+      const resolvedPath = res?.path || p;
       if (resolvedPath !== remotePath) {
+        fetchedPathRef.current = resolvedPath;
         setRemotePath(resolvedPath);
       }
       setRemotePathInput(resolvedPath);
-      const sorted = [...res.files].sort((a, b) => {
+      const rawFiles = Array.isArray(res?.files) ? res.files : [];
+      const sorted = [...rawFiles].sort((a, b) => {
         if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-        return a.name.localeCompare(b.name);
+        return (a.name || '').localeCompare(b.name || '');
       });
       setRemoteFiles(sorted);
       setSelectedRemote(null);
-      addLog(`Status: Directory listing of "${resolvedPath}" successful (${res.files.length} items)`);
+      addLog(`Status: Directory listing of "${resolvedPath}" successful (${sorted.length} items)`);
     } catch (err: any) {
-      addLog(`Error: Remote directory listing failed: ${err.message}`);
-      toast.error(`Failed to load remote directory: ${err.message}`);
+      addLog(`Error: Remote directory listing failed: ${err.message || 'Unknown error'}`);
+      if (isActive) {
+        toast.error(`Failed to load remote directory: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setLoadingRemote(false);
     }
   }
 
-  // Initial load
+  // Lazy load remote files: only when tab is active to avoid hammering servers on initial refresh
   useEffect(() => {
-    loadLocalFiles();
-    loadRemoteFiles(remotePath);
-  }, [tab.connectionId]);
+    if (!isActive) return;
 
+    if (tab.connectionId && (!hasLoadedRemoteRef.current || fetchedPathRef.current !== remotePath)) {
+      hasLoadedRemoteRef.current = true;
+      fetchedPathRef.current = remotePath;
+      loadRemoteFiles(remotePath);
+    }
+  }, [isActive, tab.connectionId, remotePath]);
+
+  // Lazy load local files: only when tab is active AND dual-pane mode is enabled
   useEffect(() => {
-    loadRemoteFiles(remotePath);
-  }, [remotePath]);
+    if (!isActive || paneMode !== 'dual') return;
+
+    if (!hasLoadedLocalRef.current) {
+      hasLoadedLocalRef.current = true;
+      loadLocalFiles();
+    }
+  }, [isActive, paneMode]);
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -1145,7 +1185,7 @@ export function SFTPManager({ tab }: Props) {
                         </div>
                       </TableCell>
                       <TableCell className="px-2 py-1 align-middle text-right text-zinc-400 text-xs font-mono truncate">
-                        {isDir ? '—' : file.size.toLocaleString()}
+                        {isDir ? '—' : (file.size ?? 0).toLocaleString()}
                       </TableCell>
                       <TableCell className="px-2 py-1 align-middle text-left text-zinc-400 text-xs truncate">
                         {file.filetype || getFileType(file.name, isDir)}
@@ -1166,8 +1206,8 @@ export function SFTPManager({ tab }: Props) {
       <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none">
         <span>
           {localSearchQuery
-            ? `${sortedAndFilteredLocalFiles.length} matched (${localStats.fileCount} files, ${localStats.dirCount} dirs)`
-            : `${localStats.fileCount} files and ${localStats.dirCount} directories. Total size: ${localStats.totalBytes.toLocaleString()} bytes`}
+            ? `${sortedAndFilteredLocalFiles.length} matched (${localStats?.fileCount ?? 0} files, ${localStats?.dirCount ?? 0} dirs)`
+            : `${localStats?.fileCount ?? 0} files and ${localStats?.dirCount ?? 0} directories. Total size: ${(localStats?.totalBytes ?? 0).toLocaleString()} bytes`}
         </span>
         {selectedLocal && (
           <span className="text-emerald-400 truncate max-w-[200px]">
@@ -1574,8 +1614,8 @@ export function SFTPManager({ tab }: Props) {
       <div className="h-6 border-t border-zinc-800/80 bg-zinc-950 px-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-400 shrink-0 select-none">
         <span>
           {remoteSearchQuery
-            ? `${sortedAndFilteredRemoteFiles.length} matched (${remoteFileCount} files, ${remoteDirCount} dirs)`
-            : `${remoteFileCount} files and ${remoteDirCount} directories. Total size: ${remoteTotalBytes.toLocaleString()} bytes`}
+            ? `${sortedAndFilteredRemoteFiles.length} matched (${remoteFileCount ?? 0} files, ${remoteDirCount ?? 0} dirs)`
+            : `${remoteFileCount ?? 0} files and ${remoteDirCount ?? 0} directories. Total size: ${(remoteTotalBytes ?? 0).toLocaleString()} bytes`}
         </span>
         {selectedRemote && (
           <span className="text-amber-400 truncate max-w-[260px]">

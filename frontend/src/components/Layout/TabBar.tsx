@@ -104,8 +104,8 @@ export function TabBar() {
       {/* Left: Tab list with instant native desktop responsiveness */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 py-1 touch-pan-x">
         {tabs.map((tab) => {
-          const Icon = TAB_ICONS[tab.type];
-          const accent = TAB_ACCENTS[tab.type];
+          const Icon = TAB_ICONS[tab.type] || Terminal;
+          const accent = TAB_ACCENTS[tab.type] || TAB_ACCENTS.ssh;
           const isActive = tab.id === activeTabId;
           const isEditing = editingTabId === tab.id;
 

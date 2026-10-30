@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Component, ReactNode, ErrorInfo } from 'react';
 import { LogOut, Lock, Terminal, Plus, X, Copy, Sun, Moon, Rows2, Columns2, Menu } from 'lucide-react';
 import { useAppStore, Tab } from '@/store/appStore';
 import { api } from '@/utils/api';
@@ -17,6 +17,68 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
+interface TabErrorBoundaryProps {
+  tab: Tab;
+  onClose: (tabId: string) => void;
+  children: ReactNode;
+}
+
+interface TabErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class TabErrorBoundary extends Component<TabErrorBoundaryProps, TabErrorBoundaryState> {
+  constructor(props: TabErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): TabErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error(`Tab error in [${this.props.tab.label} (${this.props.tab.id})]:`, error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-full w-full flex items-center justify-center p-6 bg-zinc-950 text-zinc-300 font-mono select-none">
+          <div className="max-w-md w-full p-4 bg-zinc-900 border border-zinc-800 rounded-md shadow-lg space-y-3">
+            <div className="flex items-center gap-2 text-rose-400 font-semibold text-xs">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span>Session render error: {this.props.tab.label}</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 break-all leading-relaxed bg-zinc-950 p-2 rounded border border-zinc-800">
+              {this.state.error?.message || 'An unexpected rendering error occurred in this tab.'}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => this.props.onClose(this.props.tab.id)}
+                className="h-7 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700 text-xs"
+              >
+                Close Tab
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="h-7 px-3 bg-sky-600 hover:bg-sky-500 text-white text-xs"
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function AppShell() {
   const {
     user,
@@ -26,6 +88,7 @@ export function AppShell() {
     tabs,
     activeTabId,
     setActiveTab,
+    closeTab,
     splitMode,
     splitTabId,
     setSplitMode,
@@ -167,16 +230,25 @@ export function AppShell() {
   const activeSessions = tabs.filter((t) => t.type === 'ssh' && tabStatuses[t.id] === 'connected').length;
 
   const renderTabContent = (tab: Tab) => {
+    let content: ReactNode = null;
     switch (tab.type) {
       case 'ssh':
-        return <SSHTerminal tab={tab} />;
+        content = <SSHTerminal tab={tab} />;
+        break;
       case 'database':
-        return <QueryEditor tab={tab} />;
+        content = <QueryEditor tab={tab} />;
+        break;
       case 'sftp':
-        return <SFTPManager tab={tab} />;
+        content = <SFTPManager tab={tab} />;
+        break;
       default:
-        return null;
+        content = null;
     }
+    return (
+      <TabErrorBoundary tab={tab} onClose={closeTab}>
+        {content}
+      </TabErrorBoundary>
+    );
   };
 
   const handlePane2Select = (newTabId: string) => {
@@ -443,7 +515,7 @@ export function AppShell() {
                         >
                           {tabs.map((t) => (
                             <option key={t.id} value={t.id} className="bg-zinc-900 text-zinc-200">
-                              {t.label} ({t.type.toUpperCase()})
+                              {t.label} ({(t.type || 'tab').toUpperCase()})
                             </option>
                           ))}
                         </select>

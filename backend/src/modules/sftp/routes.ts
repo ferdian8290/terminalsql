@@ -31,7 +31,7 @@ function formatRights(rights: any): string {
   return String(rights);
 }
 
-async function getSftpClient(conn: any, creds: any, userId?: string): Promise<SftpSessionHandle> {
+async function getSftpClient(conn: any, creds: any, userId?: string, retries = 1): Promise<SftpSessionHandle> {
   const sftp = new SftpClient();
   let bastionClient: any;
   let forwardedStream: any;
@@ -44,16 +44,29 @@ async function getSftpClient(conn: any, creds: any, userId?: string): Promise<Sf
     }
   }
 
-  await sftp.connect({
-    sock: forwardedStream || undefined,
-    host: forwardedStream ? undefined : conn.host,
-    port: forwardedStream ? undefined : conn.port,
-    username: conn.username,
-    password: creds.password,
-    privateKey: creds.privateKey,
-    passphrase: creds.passphrase,
-    readyTimeout: 15000,
-  });
+  try {
+    await sftp.connect({
+      sock: forwardedStream || undefined,
+      host: forwardedStream ? undefined : conn.host,
+      port: forwardedStream ? undefined : conn.port,
+      username: conn.username,
+      password: creds.password,
+      privateKey: creds.privateKey,
+      passphrase: creds.passphrase,
+      readyTimeout: 15000,
+    });
+  } catch (err: any) {
+    try { await sftp.end(); } catch {}
+    try { bastionClient?.end(); } catch {}
+
+    const isReset = err.code === 'ECONNRESET' || (typeof err.message === 'string' && err.message.includes('ECONNRESET'));
+    if (retries > 0 && isReset) {
+      // Server was under burst connection load. Back off briefly and retry once.
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return getSftpClient(conn, creds, userId, retries - 1);
+    }
+    throw err;
+  }
 
   const cleanup = async () => {
     try { await sftp.end(); } catch {}
@@ -83,8 +96,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       let targetPath = (path || '').trim();
@@ -97,7 +118,7 @@ export async function sftpRoutes(app: FastifyInstance) {
       }
 
       const list = await sftp.list(targetPath);
-      const files = list.map((f) => ({
+      const files = list.map((f: any) => ({
         name: f.name,
         type: f.type === 'd' ? 'directory' : 'file',
         size: f.size,
@@ -122,8 +143,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       const stat = await sftp.stat(path);
@@ -150,8 +179,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       const data = await request.file();
@@ -180,8 +217,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       if (type === 'directory') {
@@ -203,8 +248,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       await sftp.mkdir(path, true);
@@ -226,8 +279,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       await sftp.rename(oldPath, newPath);
@@ -252,8 +313,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     const limitBytes = Math.min(parseInt(maxBytes || '', 10) || 2 * 1024 * 1024, 5 * 1024 * 1024);
 
@@ -331,8 +400,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       const stat = await sftp.stat(path);
@@ -501,8 +578,16 @@ export async function sftpRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: `Local file not found: ${localPath}` });
     }
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       const readStream = fs.createReadStream(localPath);
@@ -532,8 +617,16 @@ export async function sftpRoutes(app: FastifyInstance) {
     const conn = await getVerifiedConnection(db, connectionId, request.user!.sub);
     if (!conn) return reply.status(404).send({ error: 'Connection not found' });
 
-    const creds = JSON.parse(decrypt(conn.encryptedCredentials));
-    const { sftp, cleanup } = await getSftpClient(conn, creds, request.user!.sub);
+    let sftp: any;
+    let cleanup: () => Promise<void>;
+    try {
+      const creds = JSON.parse(decrypt(conn.encryptedCredentials));
+      const client = await getSftpClient(conn, creds, request.user!.sub);
+      sftp = client.sftp;
+      cleanup = client.cleanup;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `SFTP Connection failed: ${err.message || 'Unknown error'}` });
+    }
 
     try {
       if (!fs.existsSync(localDir)) {

@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.15-purple)
+![Version](https://img.shields.io/badge/Version-1.5.16-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -294,7 +294,12 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 
 ## Changelog & Version History
 
-### [v1.5.15] - 2026-10-30
+### [v1.5.16] - 2026-10-30
+- **Lazy Tab Remote Data Loading**: SFTP directory listings now load strictly on-demand when a tab is active. Inactive tabs no longer blast concurrent SSH/SFTP handshakes to remote hosts upon browser refresh, eliminating `ECONNRESET` connection flood rejections.
+- **Background Error Toast Suppression**: Inactive background tabs suppress global error popups (`toast.error`), keeping notifications scoped strictly to the currently focused workspace tab.
+- **Backend SFTP Connection Auto-Retry**: Added exponential backoff and automatic retry on `ECONNRESET` in `backend/src/modules/sftp/routes.ts` to seamlessly recover from transient connection bursts.
+- **Tab-Level Isolated Error Boundary**: Wrapped workspace tab renders in `<TabErrorBoundary>` so any unexpected component failure is isolated to that specific tab pane with a retry/close button, keeping the entire application, sidebar, and other active sessions alive.
+- **Comprehensive Defensive Nullish Rendering**: Hardened all numeric formatting (`.toLocaleString()`), stats calculations, and optional tab connection fields across SFTP and QueryEditor against `undefined`/`null` values.
 - **100% Flexible Auto Table Layout**: Eliminating hardcoded table width constraints by allowing the table to span 100% (`w-full`) of the workspace canvas. The primary `Filename` column flexibly absorbs all available screen width, completely preventing long filenames from being truncated or clipped.
 - **Dynamic Proportional Column Sizing**: Initialized explicit column widths for `Filesize`, `Filetype`, `Last modified`, and `Permissions` while keeping `Filename` auto-flexible, with seamless transition to fixed pixel widths upon dragging column borders.
 

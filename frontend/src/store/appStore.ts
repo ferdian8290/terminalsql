@@ -139,7 +139,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter((t: any) => t && t.id && t.type && t.connection);
+          return parsed
+            .filter((t: any) => t && t.id && t.type)
+            .map((t: any) => ({ ...t, connection: t.connection || {} }));
         }
       }
     } catch {}
@@ -147,7 +149,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   })(),
   activeTabId: (() => {
     try {
-      return localStorage.getItem('terminalsql_active_tab') || null;
+      const savedTabs = localStorage.getItem('terminalsql_saved_tabs');
+      const active = localStorage.getItem('terminalsql_active_tab') || null;
+      if (savedTabs && active) {
+        const parsed = JSON.parse(savedTabs);
+        if (Array.isArray(parsed) && parsed.some((t: any) => t?.id === active)) {
+          return active;
+        }
+        return (Array.isArray(parsed) && parsed[0]?.id) || null;
+      }
     } catch {}
     return null;
   })(),

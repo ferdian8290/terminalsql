@@ -348,7 +348,7 @@ export function QueryEditor({ tab }: Props) {
     setNewTemplateSql(targetSql || '');
     setNewTemplateName('');
     setNewTemplateDesc('');
-    setNewTemplateDbType((tab.connection as any).dbType || 'all');
+    setNewTemplateDbType((tab.connection as any)?.dbType || 'all');
     setShowSaveTemplateForm(true);
     setIsTemplatesOpen(true);
   };
@@ -425,7 +425,7 @@ export function QueryEditor({ tab }: Props) {
 
   // Cluster & Database selector states
   const [availableDbs, setAvailableDbs] = useState<string[]>([]);
-  const [activeDb, setActiveDb] = useState<string>(tab.initialDatabase || (tab.connection as any).database || '');
+  const [activeDb, setActiveDb] = useState<string>(tab.initialDatabase || (tab.connection as any)?.database || '');
   const [dbFilterText, setDbFilterText] = useState('');
   const [loadingDbs, setLoadingDbs] = useState(false);
 
@@ -475,7 +475,7 @@ export function QueryEditor({ tab }: Props) {
             setActiveDb(names[0]);
           }
         } else if (res.tables && res.tables.length > 0) {
-          const defaultDb = tab.initialDatabase || (tab.connection as any).database || 'public';
+          const defaultDb = tab.initialDatabase || (tab.connection as any)?.database || 'public';
           setAvailableDbs([defaultDb]);
           if (!activeDb) setActiveDb(defaultDb);
         }
