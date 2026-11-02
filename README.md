@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.21-purple)
+![Version](https://img.shields.io/badge/Version-1.5.22-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,11 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.22] - 2026-11-02
+- **Intelligent Conditional Copy & Paste Context Menu**: Dynamically evaluates clipboard and text selection states. When nothing has been copied yet, the "Paste from Clipboard" action is cleanly omitted; once copied, "Paste" appears immediately. Similarly, "Copy Selection" only renders when text is actively selected in the terminal.
+- **Silent PuTTY Right-Click Paste (Zero Toast Spam)**: Eliminated distracting "Press Ctrl+Shift+V" or "Clipboard empty" error toasts when right-clicking on empty clipboards. Replicates true native PuTTY/desktop terminal behavior (silent no-op when empty, instant paste when text exists).
+- **Persistent Cross-Session In-App Clipboard**: Enhanced `inAppTerminalClipboard` buffer with `sessionStorage` backing and global window copy event listeners, preserving copied text seamlessly across tabs, editors, and page refreshes on non-secure HTTP origins.
 
 ### [v1.5.21] - 2026-11-02
 - **Full PuTTY Terminal Copy & Paste Workflow**: Integrated authentic PuTTY interaction with 1-click preset toggle in Terminal Settings. Releasing mouse selection (`mouseup`) auto-copies highlighted text to clipboard buffer, and right-clicking instantly pastes directly into the shell session.

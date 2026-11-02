@@ -77,7 +77,37 @@ interface TerminalSession {
 const sessionRegistry = new Map<string, TerminalSession>();
 
 // In-app clipboard buffer ensuring immediate PuTTY-style copy & paste works across all network contexts (including HTTP)
-let inAppTerminalClipboard = '';
+const CLIPBOARD_STORAGE_KEY = 'terminalsql:app_clipboard';
+
+let inAppTerminalClipboard = (() => {
+  try {
+    return sessionStorage.getItem(CLIPBOARD_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+})();
+
+export const setAppClipboard = (text: string) => {
+  if (!text) return;
+  inAppTerminalClipboard = text;
+  try {
+    sessionStorage.setItem(CLIPBOARD_STORAGE_KEY, text);
+  } catch { }
+};
+
+export const getAppClipboard = () => inAppTerminalClipboard;
+
+// Global clipboard listeners to capture any copied text within the app
+if (typeof window !== 'undefined') {
+  window.addEventListener('copy', () => {
+    try {
+      const sel = window.getSelection()?.toString();
+      if (sel) {
+        setAppClipboard(sel);
+      }
+    } catch { }
+  });
+}
 
 function sendTerminalInput(session: TerminalSession, data: string) {
   if (session.transport === 'ws' && session.ws?.readyState === WebSocket.OPEN) {
@@ -142,7 +172,12 @@ export function SSHTerminal({ tab }: Props) {
   const [, setTransport] = useState<'ws' | 'http'>('ws');
   const [settings, setSettings] = useState<TerminalSettings>(getStoredSettings);
   const [showSettings, setShowSettings] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    hasSelection: boolean;
+    hasClipboard: boolean;
+  } | null>(null);
   const settingsRef = useRef<TerminalSettings>(settings);
   settingsRef.current = settings;
 
@@ -205,6 +240,7 @@ export function SSHTerminal({ tab }: Props) {
         const text = await navigator.clipboard.readText();
         if (text) {
           textToPaste = text;
+          setAppClipboard(text);
         }
       } catch {
         // Fallback to in-app clipboard on insecure HTTP contexts or denied permissions
@@ -212,8 +248,8 @@ export function SSHTerminal({ tab }: Props) {
     }
 
     // 2. Fallback to in-app memory clipboard if Clipboard API failed or returned empty
-    if (!textToPaste && inAppTerminalClipboard) {
-      textToPaste = inAppTerminalClipboard;
+    if (!textToPaste) {
+      textToPaste = getAppClipboard();
     }
 
     // 3. Send text to active terminal session immediately
@@ -226,7 +262,7 @@ export function SSHTerminal({ tab }: Props) {
       return;
     }
 
-    toast('Clipboard empty (or press Ctrl+Shift+V)', { icon: '📋', duration: 1600 });
+    // 4. Silent no-op when nothing is in clipboard (do not show annoying error toasts)
     xtermRef.current?.focus();
   }, [tab.id]);
 
@@ -234,7 +270,7 @@ export function SSHTerminal({ tab }: Props) {
     setContextMenu(null);
     const sel = xtermRef.current?.getSelection();
     if (sel && sel.length > 0) {
-      inAppTerminalClipboard = sel;
+      setAppClipboard(sel);
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(sel).then(() => {
           toast.success('Copied to clipboard', { duration: 1200 });
@@ -270,7 +306,7 @@ export function SSHTerminal({ tab }: Props) {
     xtermRef.current?.focus();
   }, []);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+  const handleContextMenu = useCallback(async (e: React.MouseEvent | MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -279,12 +315,32 @@ export function SSHTerminal({ tab }: Props) {
       return;
     }
 
+    const term = xtermRef.current;
+    const sel = term?.getSelection() || '';
+    const hasSelection = sel.trim().length > 0;
+
+    let hasClipboard = Boolean(getAppClipboard() && getAppClipboard().length > 0);
+    if (navigator.clipboard?.readText) {
+      try {
+        const clipText = await navigator.clipboard.readText();
+        if (clipText && clipText.length > 0) {
+          setAppClipboard(clipText);
+          hasClipboard = true;
+        }
+      } catch {
+        // HTTP or permission restriction fallback
+      }
+    }
+
     const menuWidth = 280;
     const menuHeight = 310;
     const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth));
     const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight));
-    setContextMenu({ x, y });
+    setContextMenu({ x, y, hasSelection, hasClipboard });
   }, [handlePaste]);
+
+  const handleContextMenuRef = useRef(handleContextMenu);
+  handleContextMenuRef.current = handleContextMenu;
 
   const connect = useCallback((forceNew = false) => {
     let session = sessionRegistry.get(tab.id);
@@ -318,17 +374,7 @@ export function SSHTerminal({ tab }: Props) {
       container.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-
-        if (settingsRef.current.rightClickAction === 'paste') {
-          handlePaste();
-          return;
-        }
-
-        const menuWidth = 280;
-        const menuHeight = 310;
-        const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth));
-        const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight));
-        setContextMenu({ x, y });
+        handleContextMenuRef.current(e);
       }, true);
 
       // Capture-phase mouseup listener for PuTTY copy-on-select
@@ -336,7 +382,7 @@ export function SSHTerminal({ tab }: Props) {
         if (settingsRef.current.copyOnSelect && term) {
           const sel = term.getSelection();
           if (sel && sel.length > 0) {
-            inAppTerminalClipboard = sel;
+            setAppClipboard(sel);
             if (navigator.clipboard?.writeText) {
               navigator.clipboard.writeText(sel).catch(() => {
                 fallbackCopyText(sel);
@@ -543,14 +589,7 @@ export function SSHTerminal({ tab }: Props) {
         if (settingsRef.current.copyOnSelect) {
           const sel = term.getSelection();
           if (sel && sel.length > 0) {
-            inAppTerminalClipboard = sel;
-            if (navigator.clipboard?.writeText) {
-              navigator.clipboard.writeText(sel).catch(() => {
-                fallbackCopyText(sel);
-              });
-            } else {
-              fallbackCopyText(sel);
-            }
+            setAppClipboard(sel);
           }
         }
       });
@@ -981,27 +1020,37 @@ export function SSHTerminal({ tab }: Props) {
               Terminal Actions
             </div>
 
-            <button
-              onClick={handlePaste}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
-            >
-              <span className="flex items-center gap-2 whitespace-nowrap">
-                <ClipboardPaste className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-                <span>Paste from Clipboard</span>
-              </span>
-              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+Shift+V</span>
-            </button>
+            {/* Smart Paste: Only rendered when there is copied text available */}
+            {contextMenu.hasClipboard && (
+              <button
+                onClick={handlePaste}
+                className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
+              >
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <ClipboardPaste className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                  <span>Paste from Clipboard</span>
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+Shift+V</span>
+              </button>
+            )}
 
-            <button
-              onClick={handleCopySelection}
-              className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
-            >
-              <span className="flex items-center gap-2 whitespace-nowrap">
-                <Copy className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400 shrink-0" />
-                <span>Copy Selection</span>
-              </span>
-              <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+Shift+C</span>
-            </button>
+            {/* Smart Copy: Only rendered when text is actively selected */}
+            {contextMenu.hasSelection && (
+              <button
+                onClick={handleCopySelection}
+                className="w-full flex items-center justify-between gap-6 px-2.5 py-1.5 rounded text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white transition-colors select-none"
+              >
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <Copy className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400 shrink-0" />
+                  <span>Copy Selection</span>
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 shrink-0">Ctrl+Shift+C</span>
+              </button>
+            )}
+
+            {(contextMenu.hasClipboard || contextMenu.hasSelection) && (
+              <div className="h-px bg-zinc-200 dark:bg-zinc-800/80 my-1" />
+            )}
 
             <button
               onClick={handleSelectAll}
