@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.22-purple)
+![Version](https://img.shields.io/badge/Version-1.5.23-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -286,13 +286,62 @@ DB_PATH=/app/data/terminalsql.db
 
 TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 - **High-Density Typography**: Item sidebar dan tree berukuran compact `11px` (tinggi baris `20px`); toolbar & input `11.5px` ~ `12px`; badge & mono `9.5px` ~ `10px`.
-- **Zero Browser Context Menus**: Klik kanan browser default diblokir sepenuhnya dan digantikan oleh custom dark context menu.
-- **Categorized Schema Tree**: Schema dikelompokkan ke dalam 4 folder standar (Tables, Foreign Tables, Views, Materialized Views).
-- **Monaco SQL Priority**: Shortcut `Ctrl+Enter` memprioritaskan teks SQL yang di-blok/highlight sebelum mengeksekusi seluruh isi query editor.
+- **Zero Browser Context Menus**: Klik kanan browser default (`Back`, `Forward`, `Reload`, `Inspect`, `View Source`) diblokir 100% di seluruh viewport dan digantikan oleh custom dark context menu (`shadcn/ui` style).
+- **Categorized Schema Tree**: Schema database dikelompokkan ke dalam 4 folder standar (Tables, Foreign Tables, Views, Materialized Views).
+- **Monaco SQL Priority**: Shortcut `Ctrl+Enter` (dan `Cmd+Enter`) memprioritaskan teks SQL yang di-blok/highlight sebelum mengeksekusi seluruh isi query editor.
+
+---
+
+## Terminal & SSH Interaction Standard (PuTTY Paradigm & Smart Clipboard)
+
+Modul SSH Terminal dirancang dengan interaksi setingkat native desktop terminal (PuTTY / iTerm2):
+
+1. **PuTTY Clipboard Workflow**:
+   - **Copy on Select**: Ketika kursor mouse menyeleksi teks pada terminal dan tombol mouse dilepas (`mouseup`), teks yang disorot otomatis disalin ke buffer clipboard aplikasi dan system clipboard OS.
+   - **Direct Right-Click Paste**: Klik kanan pada layar terminal langsung mengeksekusi penempelan teks (*paste*) ke cursor shell yang sedang aktif tanpa harus membuka menu dropdown.
+   - **Silent No-Op When Empty**: Jika clipboard belum terisi (belum ada teks yang di-copy), klik kanan akan senyap (*silent no-op*) tanpa memunculkan toast error atau popup yang mengganggu.
+
+2. **Intelligent Dynamic Context Menu**:
+   - **Kondisi Paste**: Menu **"Paste from Clipboard"** hanya akan muncul jika clipboard sudah memiliki teks salinan. Jika kosong, tombol Paste tidak akan ditampilkan.
+   - **Kondisi Copy**: Menu **"Copy Selection"** hanya akan muncul ketika pengguna sedang menyeleksi teks di xterm. Jika tidak ada teks yang diblok, tombol Copy tidak akan muncul.
+   - **In-App Persistent Clipboard**: Menggunakan fallback `sessionStorage` internal dan global listener window `copy`, menjamin operasi salin-tempel tetap instan dan berjalan lancar bahkan pada koneksi non-secure HTTP IP (`http://<ip>:5176`).
+
+3. **Terminal Settings & Theme Sync**:
+   - **1-Click PuTTY Mode Preset**: Tombol aktivasi instan di modal Appearance & Font Settings yang langsung mengaktifkan opsi *Copy on Select* dan *Right-Click: Direct Paste (PuTTY)*.
+   - **Real-Time Cross-Tab Synchronization**: Perubahan font, tema (Tokyo Night, One Dark, Monokai, Nord, Dracula, dsb.), dan mode klik kanan langsung disinkronkan ke seluruh tab terminal yang terbuka tanpa memutuskan koneksi WebSocket shell yang aktif.
+
+---
+
+## SFTP Manager Architecture & High-Density Explorer
+
+1. **True 100% Full-Width Explorer Table**:
+   - Menghilangkan celah kosong (*void whitespace*) di sisi kanan tabel. Kolom `Filename` menggunakan model flex `w-auto` yang menyerap sisa lebar viewport secara otomatis dan presisi, menyatu rapi di bawah toolbar.
+2. **Dedicated SSH & SFTP Tab Separation**:
+   - Host SSH terkelola rapi pada tab navigasi `Terminal`. Akses SFTP untuk server terkait dapat dibuka langsung kapan saja melalui klik kanan -> `Open SFTP Manager`, mencegah duplikasi entri pada tab navigasi `SFTP`.
+3. **Resilient SFTP Recovery & Concurrency Guard**:
+   - Mekanisme retry otomatis 3x dengan *exponential backoff* menangani `ECONNRESET`, `ETIMEDOUT`, dan `ECONNREFUSED`.
+   - Tombol refresh direktori dilengkapi indikator spinner animasi dan state disabled saat proses fetch berlangsung untuk mencegah tabrakan data ganda (*concurrent storms*).
+
+---
+
+## Deployment Separation: Native Linux Server vs Container
+
+| Parameter | Native Linux Server (`./sync_to_server.sh`) | Container Stack (`./sync_to_docker.sh`) |
+|---|---|---|
+| **Target Host** | `root@10.54.68.230` (atau IP produksi native) | `root@10.54.68.151` (atau server on-premise container) |
+| **Path Server** | `/root/dashboard/terminalsql` | `/root/docker_compose/terminalsql` |
+| **Metode Sinkronisasi** | **Pure Rsync Delta Source + Dist** (~1-2 detik) | **SHA256 Image Hash Diffing + Fast-Sync** |
+| **Eksklusi File** | Bersih 100% dari Docker (`docker-images/`, `*.tar.gz`, `Dockerfile*`, `docker-compose*`) | Mengecualikan file native server (`sync_to_server.sh`, `terminalsql.service`) |
+| **Service Engine** | Systemd Daemon (`terminalsql.service`) | Docker Engine & Docker Compose |
+| **Port Akses** | `5176` (Unified Web & API) | `5175` (Frontend Nginx) / `3002` (Backend API) |
 
 ---
 
 ## Changelog & Version History
+
+### [v1.5.23] - 2026-11-02
+- **Documentation & Architectural Standard Update**: Documented the complete PuTTY interaction paradigm, dynamic conditional clipboard context menu, persistent in-app cross-session buffer, SFTP full-width table responsiveness, and pure native vs container deployment separation across `README.md` and `DOCKER_GUIDE.md`.
+- **Zero-Error Verified Production Stack**: All TypeScript types, build bundles, and deployment scripts validated with zero compilation warnings.
 
 ### [v1.5.22] - 2026-11-02
 - **Intelligent Conditional Copy & Paste Context Menu**: Dynamically evaluates clipboard and text selection states. When nothing has been copied yet, the "Paste from Clipboard" action is cleanly omitted; once copied, "Paste" appears immediately. Similarly, "Copy Selection" only renders when text is actively selected in the terminal.

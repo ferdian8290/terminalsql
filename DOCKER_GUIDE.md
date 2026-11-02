@@ -14,11 +14,17 @@ TerminalSQL dirancang agar dapat berjalan secara **Native** (systemd / Node.js) 
 | **Port Backend API** | `5176` (unified port) | `3002` (internal network bridge) |
 | **Lokasi Database** | `./backend/data/terminalsql.db` | `./backend/data:/app/data:z` (volume share) |
 | **Data Synchronization** | Terbaca langsung oleh SQLite | Terbaca langsung oleh SQLite via host mount |
-| **Lifecycle Service** | `systemctl restart terminalsql-backend` | `docker compose up -d` / `./sync_to_docker.sh` |
+| **Lifecycle Service** | `systemctl restart terminalsql.service` | `docker compose up -d` / `./sync_to_docker.sh` |
+| **Deployment Script** | `./sync_to_server.sh` (Pure rsync delta, 0 Docker files sent) | `./sync_to_docker.sh` (SHA256 image diff, offline tar) |
 
 > [!TIP]
 > **Zero Data Loss & Zero Divergence:**
 > Karena kedua mode mengarah ke host path yang sama (`./backend/data/terminalsql.db`), setiap koneksi baru, bookmark query, atau template SQL yang Anda buat di instalasi Native akan otomatis langsung tersedia di Docker, begitu pula sebaliknya!
+
+> [!NOTE]
+> **Isolasi Penuh Deployment Script:**
+> - `sync_to_server.sh` mengecualikan seluruh file Docker (`docker-images/`, `*.tar.gz`, `Dockerfile*`, `docker-compose*.yml`) sehingga server native tetap bersih.
+> - `sync_to_docker.sh` mengecualikan script native (`sync_to_server.sh`, `terminalsql.service`) dan fokus pada container lifecycle.
 
 ---
 
