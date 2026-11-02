@@ -450,34 +450,72 @@ export function TerminalSettingsModal({ settings: initial, onSave, onClose }: Pr
             </div>
           </div>
 
-          {/* Row 6: Native Desktop & Mouse Behavior */}
-          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-800/80">
-            <div className="flex items-center justify-between p-2 rounded-md bg-zinc-950 border border-zinc-800">
-              <div className="space-y-0.5">
-                <Label htmlFor="copy-select" className="text-xs text-zinc-300 cursor-pointer">Copy on Select</Label>
-                <p className="text-[10px] text-zinc-500 font-mono">Auto-copy highlighted text</p>
+          {/* Row 6: Native Desktop & Mouse Behavior (PuTTY Copy & Paste Mode) */}
+          <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
+            {/* Quick PuTTY Profile Preset Toggle */}
+            <div className="flex items-center justify-between p-2 rounded-md bg-zinc-900/60 border border-amber-500/30">
+              <div className="flex items-center gap-2">
+                <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  PuTTY
+                </span>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-200">PuTTY Clipboard & Right-Click Mode</p>
+                  <p className="text-[10px] text-zinc-400 font-mono">Copy on select + Right-click to paste immediately</p>
+                </div>
               </div>
-              <Switch
-                id="copy-select"
-                checked={form.copyOnSelect}
-                onCheckedChange={(checked) => update('copyOnSelect', checked)}
-              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  update('copyOnSelect', true);
+                  update('rightClickAction', 'paste');
+                }}
+                className={`h-7 px-2.5 text-xs font-mono gap-1 transition-all ${
+                  form.copyOnSelect && form.rightClickAction === 'paste'
+                    ? 'border-emerald-500/60 bg-emerald-950/40 text-emerald-300'
+                    : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white'
+                }`}
+              >
+                {form.copyOnSelect && form.rightClickAction === 'paste' ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span>PuTTY Active</span>
+                  </>
+                ) : (
+                  <span>Enable PuTTY Mode</span>
+                )}
+              </Button>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-zinc-300">Right-Click Action</Label>
-              <Select
-                value={form.rightClickAction}
-                onValueChange={(val: any) => update('rightClickAction', val)}
-              >
-                <SelectTrigger className="bg-zinc-950 border-zinc-800 text-zinc-200 h-8 text-xs font-mono">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200 text-xs">
-                  <SelectItem value="menu">Native Context Menu</SelectItem>
-                  <SelectItem value="paste">Direct Paste (PuTTY)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center justify-between p-2 rounded-md bg-zinc-950 border border-zinc-800">
+                <div className="space-y-0.5">
+                  <Label htmlFor="copy-select" className="text-xs text-zinc-300 cursor-pointer">Copy on Select</Label>
+                  <p className="text-[10px] text-zinc-500 font-mono">Auto-copy highlighted text</p>
+                </div>
+                <Switch
+                  id="copy-select"
+                  checked={form.copyOnSelect}
+                  onCheckedChange={(checked) => update('copyOnSelect', checked)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-zinc-300">Right-Click Action</Label>
+                <Select
+                  value={form.rightClickAction}
+                  onValueChange={(val: any) => update('rightClickAction', val)}
+                >
+                  <SelectTrigger className="bg-zinc-950 border-zinc-800 text-zinc-200 h-8 text-xs font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200 text-xs">
+                    <SelectItem value="menu">Native Context Menu</SelectItem>
+                    <SelectItem value="paste">Direct Paste (PuTTY)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </div>

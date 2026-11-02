@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.20-purple)
+![Version](https://img.shields.io/badge/Version-1.5.21-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -293,6 +293,12 @@ TerminalSQL tunduk pada standar antarmuka **Native Desktop App Paradigm**:
 ---
 
 ## Changelog & Version History
+
+### [v1.5.21] - 2026-11-02
+- **Full PuTTY Terminal Copy & Paste Workflow**: Integrated authentic PuTTY interaction with 1-click preset toggle in Terminal Settings. Releasing mouse selection (`mouseup`) auto-copies highlighted text to clipboard buffer, and right-clicking instantly pastes directly into the shell session.
+- **Universal Capture-Phase Context Menu Dispatcher**: Bound native capture-phase event listeners to the xterm DOM container, guaranteeing right-click paste or context menu activation even if inner xterm canvas or addons intercept bubbling events.
+- **Cross-Origin In-App Clipboard Buffer**: Implemented an internal in-memory clipboard cache (`inAppTerminalClipboard`) alongside the browser Async Clipboard API. Guarantees seamless right-click copy & paste operations across non-secure HTTP connections and restrictive browser permission environments.
+- **Real-Time Cross-Tab Terminal Settings Synchronization**: Broadcasted `terminalsql:settings-updated` custom events across active tabs upon saving preferences, dynamically applying fonts, themes, and mouse interaction rules across all sessions without reconnecting.
 
 ### [v1.5.20] - 2026-10-30
 - **Pure Native Delta Sync (Zero Docker Overhead)**: Excluded `docker-images`, archives (`*.tar.gz`), `Dockerfile*`, and `docker-compose*.yml` from `sync_to_server.sh`. Native server updates now transfer exclusively modified code and web assets via rsync delta algorithm, completing deployments in ~1 second.

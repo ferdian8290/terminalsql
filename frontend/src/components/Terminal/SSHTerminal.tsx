@@ -76,6 +76,9 @@ interface TerminalSession {
 
 const sessionRegistry = new Map<string, TerminalSession>();
 
+// In-app clipboard buffer ensuring immediate PuTTY-style copy & paste works across all network contexts (including HTTP)
+let inAppTerminalClipboard = '';
+
 function sendTerminalInput(session: TerminalSession, data: string) {
   if (session.transport === 'ws' && session.ws?.readyState === WebSocket.OPEN) {
     session.ws.send(JSON.stringify({ type: 'input', data }));
@@ -158,6 +161,7 @@ export function SSHTerminal({ tab }: Props) {
     settingsRef.current = newSettings;
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
+      window.dispatchEvent(new CustomEvent('terminalsql:settings-updated', { detail: newSettings }));
     } catch { }
 
     if (xtermRef.current) {
@@ -193,40 +197,57 @@ export function SSHTerminal({ tab }: Props) {
 
   const handlePaste = useCallback(async () => {
     setContextMenu(null);
-    try {
-      if (navigator.clipboard?.readText) {
+    let textToPaste = '';
+
+    // 1. Try reading from modern Clipboard API if supported and permitted
+    if (navigator.clipboard?.readText) {
+      try {
         const text = await navigator.clipboard.readText();
         if (text) {
-          const sess = sessionRegistry.get(tab.id);
-          if (sess) sendTerminalInput(sess, text);
+          textToPaste = text;
         }
-      } else {
-        toast('Press Ctrl+Shift+V to paste on HTTP connections', { icon: '📋' });
+      } catch {
+        // Fallback to in-app clipboard on insecure HTTP contexts or denied permissions
+      }
+    }
+
+    // 2. Fallback to in-app memory clipboard if Clipboard API failed or returned empty
+    if (!textToPaste && inAppTerminalClipboard) {
+      textToPaste = inAppTerminalClipboard;
+    }
+
+    // 3. Send text to active terminal session immediately
+    if (textToPaste) {
+      const sess = sessionRegistry.get(tab.id);
+      if (sess) {
+        sendTerminalInput(sess, textToPaste);
       }
       xtermRef.current?.focus();
-    } catch {
-      toast('Press Ctrl+Shift+V to paste on HTTP connections', { icon: '📋' });
-      xtermRef.current?.focus();
+      return;
     }
+
+    toast('Clipboard empty (or press Ctrl+Shift+V)', { icon: '📋', duration: 1600 });
+    xtermRef.current?.focus();
   }, [tab.id]);
 
   const handleCopySelection = useCallback(() => {
     setContextMenu(null);
     const sel = xtermRef.current?.getSelection();
     if (sel && sel.length > 0) {
+      inAppTerminalClipboard = sel;
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(sel).then(() => {
-          toast.success('Copied to clipboard');
+          toast.success('Copied to clipboard', { duration: 1200 });
         }).catch(() => {
           if (fallbackCopyText(sel)) {
-            toast.success('Copied to clipboard');
+            toast.success('Copied to clipboard', { duration: 1200 });
           } else {
             toast.error('Failed to copy to clipboard');
           }
         });
       } else {
         if (fallbackCopyText(sel)) {
-          toast.success('Copied to clipboard');
+          toast.success('Copied to clipboard', { duration: 1200 });
         } else {
           toast.error('Failed to copy to clipboard');
         }
@@ -292,6 +313,40 @@ export function SSHTerminal({ tab }: Props) {
 
       const container = document.createElement('div');
       container.className = 'w-full h-full';
+
+      // Capture-phase native contextmenu listener on container for instant PuTTY paste or menu
+      container.addEventListener('contextmenu', (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (settingsRef.current.rightClickAction === 'paste') {
+          handlePaste();
+          return;
+        }
+
+        const menuWidth = 280;
+        const menuHeight = 310;
+        const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth));
+        const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight));
+        setContextMenu({ x, y });
+      }, true);
+
+      // Capture-phase mouseup listener for PuTTY copy-on-select
+      container.addEventListener('mouseup', () => {
+        if (settingsRef.current.copyOnSelect && term) {
+          const sel = term.getSelection();
+          if (sel && sel.length > 0) {
+            inAppTerminalClipboard = sel;
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(sel).catch(() => {
+                fallbackCopyText(sel);
+              });
+            } else {
+              fallbackCopyText(sel);
+            }
+          }
+        }
+      }, true);
 
       const currentSettings = settingsRef.current;
       const term = new XTerm({
@@ -488,7 +543,14 @@ export function SSHTerminal({ tab }: Props) {
         if (settingsRef.current.copyOnSelect) {
           const sel = term.getSelection();
           if (sel && sel.length > 0) {
-            navigator.clipboard.writeText(sel).catch(() => { });
+            inAppTerminalClipboard = sel;
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(sel).catch(() => {
+                fallbackCopyText(sel);
+              });
+            } else {
+              fallbackCopyText(sel);
+            }
           }
         }
       });
@@ -531,6 +593,23 @@ export function SSHTerminal({ tab }: Props) {
       }
     };
     window.addEventListener('terminalsql:tab-closed', handleTabClosed);
+
+    const handleSettingsUpdated = (e: any) => {
+      if (e.detail) {
+        setSettings(e.detail);
+        settingsRef.current = e.detail;
+        if (xtermRef.current) {
+          xtermRef.current.options.theme = getEffectiveTheme(e.detail.themePreset, appTheme);
+          xtermRef.current.options.fontFamily = e.detail.fontFamily;
+          xtermRef.current.options.fontSize = e.detail.fontSize;
+          xtermRef.current.options.lineHeight = e.detail.lineHeight;
+          xtermRef.current.options.fontWeight = e.detail.fontWeight;
+          xtermRef.current.options.cursorStyle = e.detail.cursorStyle;
+          xtermRef.current.options.cursorBlink = e.detail.cursorBlink;
+        }
+      }
+    };
+    window.addEventListener('terminalsql:settings-updated', handleSettingsUpdated);
 
     const handleResize = () => {
       if (fitRef.current && xtermRef.current) {
@@ -580,6 +659,7 @@ export function SSHTerminal({ tab }: Props) {
     return () => {
       ro?.disconnect();
       window.removeEventListener('terminalsql:tab-closed', handleTabClosed);
+      window.removeEventListener('terminalsql:settings-updated', handleSettingsUpdated);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('click', handleClickOutside);
       window.removeEventListener('keydown', handleGlobalKeyDown);
