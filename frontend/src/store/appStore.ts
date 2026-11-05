@@ -112,9 +112,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   connections: [],
   setConnections: (connections) => set({ connections }),
   addConnection: (conn) => set((s) => ({ connections: [...s.connections, conn] })),
-  updateConnection: (conn) => set((s) => ({
-    connections: s.connections.map((c) => (c.id === conn.id ? { ...c, ...conn } : c)),
-  })),
+  updateConnection: (conn) => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('terminalsql:connection-updated', { detail: conn }));
+      }
+    } catch {}
+
+    set((s) => {
+      const updatedConnections = s.connections.map((c) => (c.id === conn.id ? { ...c, ...conn } : c));
+      const updatedTabs = s.tabs.map((t) => {
+        if (t.connectionId === conn.id) {
+          const newDb = (conn as any).database || (conn as any).credentials?.database || t.initialDatabase;
+          return {
+            ...t,
+            label: conn.name || t.label,
+            connection: { ...t.connection, ...conn },
+            initialDatabase: newDb,
+          };
+        }
+        return t;
+      });
+
+      try {
+        localStorage.setItem('terminalsql_saved_tabs', JSON.stringify(updatedTabs));
+      } catch {}
+
+      return {
+        connections: updatedConnections,
+        tabs: updatedTabs,
+      };
+    });
+  },
   removeConnection: (id) => set((s) => {
     const remainingTabs = s.tabs.filter((t) => t.connectionId !== id);
     const newActive = s.activeTabId && remainingTabs.some((t) => t.id === s.activeTabId)

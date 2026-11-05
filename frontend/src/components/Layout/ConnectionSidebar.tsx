@@ -138,12 +138,40 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
   const [folderDialog, setFolderDialog] = useState<{ open: boolean; folderName: string; isRename?: boolean; oldName?: string } | null>(null);
   const [moveDialog, setMoveDialog] = useState<{ open: boolean; conn: Connection } | null>(null);
 
-  async function toggleConnTree(conn: Connection, e?: React.MouseEvent) {
+  async function reloadConnSchema(conn: Connection, e?: React.MouseEvent) {
     if (e) e.stopPropagation();
-    const willOpen = !expandedConnTree[conn.id];
+    setConnSchemas((prev) => ({ ...prev, [conn.id]: { loading: true, error: undefined } }));
+    setExpandedConnTree((prev) => ({ ...prev, [conn.id]: true }));
+
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out')), 12000)
+      );
+      const res: any = await Promise.race([api.database.schema(conn.id), timeoutPromise]);
+      const dbs = res.databases && res.databases.length > 0
+        ? res.databases
+        : [{ name: (conn as any).database || 'public', tables: (res.tables || []).map((t: any) => ({ name: t.tableName || t.name })) }];
+      setConnSchemas((prev) => ({ ...prev, [conn.id]: { loading: false, databases: dbs, schema: res.schema } }));
+      if (dbs[0]) {
+        setExpandedDbNodes((prev) => ({
+          ...prev,
+          [`${conn.id}:${dbs[0].name}`]: true,
+          [`${conn.id}:${dbs[0].name}:tables`]: true,
+        }));
+      }
+      toast.success(`Schema reloaded for ${conn.name}`, { duration: 1500 });
+    } catch (err: any) {
+      setConnSchemas((prev) => ({ ...prev, [conn.id]: { loading: false, error: err.message || 'Failed to load' } }));
+      toast.error('Failed to load schema: ' + (err.message || 'Error'));
+    }
+  }
+
+  async function toggleConnTree(conn: Connection, e?: React.MouseEvent, forceReload = false) {
+    if (e) e.stopPropagation();
+    const willOpen = forceReload ? true : !expandedConnTree[conn.id];
     setExpandedConnTree((prev) => ({ ...prev, [conn.id]: willOpen }));
 
-    if (willOpen && (!connSchemas[conn.id] || (!connSchemas[conn.id].databases && !connSchemas[conn.id].loading))) {
+    if (willOpen && (forceReload || !connSchemas[conn.id] || (!connSchemas[conn.id].databases && !connSchemas[conn.id].loading))) {
       setConnSchemas((prev) => ({ ...prev, [conn.id]: { loading: true, error: undefined } }));
       try {
         const timeoutPromise = new Promise((_, reject) =>
@@ -167,6 +195,31 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
       }
     }
   }
+
+  // Listen for connection updates to auto-invalidate and refresh schema cache
+  useEffect(() => {
+    const handleConnUpdated = (e: Event) => {
+      const updatedConn = (e as CustomEvent).detail as Connection;
+      if (!updatedConn?.id) return;
+
+      // Invalidate cache immediately
+      setConnSchemas((prev) => {
+        const next = { ...prev };
+        delete next[updatedConn.id];
+        return next;
+      });
+
+      // If tree was already expanded, re-fetch immediately with new database credentials
+      if (expandedConnTree[updatedConn.id]) {
+        reloadConnSchema(updatedConn);
+      }
+    };
+
+    window.addEventListener('terminalsql:connection-updated', handleConnUpdated);
+    return () => {
+      window.removeEventListener('terminalsql:connection-updated', handleConnUpdated);
+    };
+  }, [expandedConnTree]);
 
   function buildTableQuery(
     conn: Connection,
@@ -703,6 +756,23 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
         {/* Hierarchical Database Navigator */}
         {isDb && isTreeExpanded && (
           <div className="ml-3 pl-1.5 border-l border-border space-y-0.5 my-0.5 select-none font-sans">
+            <div className="flex items-center justify-between px-1 py-0.5 text-[9.5px] text-muted-foreground border-b border-border/40 mb-1">
+              <span className="font-mono uppercase tracking-wider text-[9px] truncate">
+                {(conn as any).database ? `DB: ${(conn as any).database}` : 'Schemas / Catalogs'}
+              </span>
+              <button
+                type="button"
+                title="Refresh Schemas & Tables"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  reloadConnSchema(conn, e);
+                }}
+                disabled={connSchemas[conn.id]?.loading}
+                className="p-0.5 rounded hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-2.5 h-2.5 text-sky-400 ${connSchemas[conn.id]?.loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
             {connSchemas[conn.id]?.loading ? (
               <div className="flex items-center gap-1.5 py-1 px-1 text-[10.5px] text-muted-foreground">
                 <Loader2 className="w-3 h-3 animate-spin text-purple-500" />
@@ -1658,6 +1728,21 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
               >
                 <Terminal className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Open SSH Terminal</span>
+              </button>
+            )}
+
+            {/* Refresh Schema for Database Connections */}
+            {contextMenu.conn.type === 'database' && (
+              <button
+                onClick={() => {
+                  const c = contextMenu.conn;
+                  setContextMenu(null);
+                  reloadConnSchema(c);
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                <span>Refresh Schema</span>
               </button>
             )}
 

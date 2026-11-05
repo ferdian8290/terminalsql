@@ -277,10 +277,8 @@ export function NewConnectionModal({
           color: form.color,
         });
 
-        if (res.connection) {
-          updateConnection(res.connection);
-        } else {
-          updateConnection({
+        const mergedConnection = {
+          ...(res.connection || {
             id: editConnection.id,
             name: form.name.trim() || form.host,
             type,
@@ -290,8 +288,11 @@ export function NewConnectionModal({
             folder: form.folder ? form.folder.trim() : null,
             tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
             color: form.color,
-          });
-        }
+          }),
+          database: form.database,
+          dbType: type === 'database' ? dbType : undefined,
+        };
+        updateConnection(mergedConnection);
         toast.success('Connection updated successfully');
         onClose();
       } else {

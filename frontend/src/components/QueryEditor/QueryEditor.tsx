@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   Play, Download, RefreshCw, Loader2, CheckCircle2, AlertCircle, Search,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { getDatabaseBrandIcon } from '@/components/common/DatabaseBrandIcons';
 import { api } from '@/utils/api';
-import { useAppStore, type Tab } from '@/store/appStore';
+import { useAppStore, type Tab, type Connection } from '@/store/appStore';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -458,36 +458,59 @@ export function QueryEditor({ tab }: Props) {
   const [pendingQueryParams, setPendingQueryParams] = useState<Record<string, string>>({});
   const [cachedParamValues, setCachedParamValues] = useState<Record<string, string>>({});
 
-  // Fetch available databases / schemas on mount for this connection
-  useEffect(() => {
-    let mounted = true;
+  // Fetch available databases / schemas on mount or when reloaded
+  const loadDatabases = useCallback((force = false, preferredDb?: string) => {
     setLoadingDbs(true);
     api.database.schema(tab.connectionId)
       .then((res: any) => {
-        if (!mounted) return;
         if (res.databases && res.databases.length > 0) {
           const names = res.databases.map((d: any) => d.name || d);
           setAvailableDbs(names);
-          if (!activeDb) {
-            const preferred = tab.initialDatabase || (names.includes('base') ? 'base' : names[0]);
+          const target = preferredDb || tab.initialDatabase;
+          if (target && names.includes(target)) {
+            setActiveDb(target);
+          } else if (force || !activeDb || !names.includes(activeDb)) {
+            const preferred = (names.includes('base') ? 'base' : names[0]);
             setActiveDb(preferred);
-          } else if (!names.includes(activeDb)) {
-            setActiveDb(names[0]);
           }
         } else if (res.tables && res.tables.length > 0) {
-          const defaultDb = tab.initialDatabase || (tab.connection as any)?.database || 'public';
+          const defaultDb = preferredDb || tab.initialDatabase || (tab.connection as any)?.database || 'public';
           setAvailableDbs([defaultDb]);
-          if (!activeDb) setActiveDb(defaultDb);
+          if (force || !activeDb) setActiveDb(defaultDb);
+        }
+        if (force) {
+          toast.success('Databases / schemas reloaded', { duration: 1500 });
         }
       })
-      .catch(() => {})
+      .catch((err: any) => {
+        if (force) {
+          toast.error(err.message || 'Failed to reload schemas');
+        }
+      })
       .finally(() => {
-        if (mounted) setLoadingDbs(false);
+        setLoadingDbs(false);
       });
-    return () => {
-      mounted = false;
+  }, [tab.connectionId, tab.initialDatabase, activeDb, tab.connection]);
+
+  useEffect(() => {
+    loadDatabases(false);
+  }, [tab.connectionId]);
+
+  // Listen for connection updates to auto-sync active SQL editor tab
+  useEffect(() => {
+    const handleConnUpdate = (e: Event) => {
+      const conn = (e as CustomEvent).detail as Connection;
+      if (conn?.id === tab.connectionId) {
+        const newDb = (conn as any).database || (conn as any).credentials?.database;
+        loadDatabases(true, newDb);
+      }
     };
-  }, [tab.connectionId, tab.initialDatabase]);
+
+    window.addEventListener('terminalsql:connection-updated', handleConnUpdate);
+    return () => {
+      window.removeEventListener('terminalsql:connection-updated', handleConnUpdate);
+    };
+  }, [tab.connectionId, loadDatabases]);
 
   const filteredDbs = useMemo(() => {
     if (!dbFilterText.trim()) return availableDbs;
@@ -1054,11 +1077,23 @@ export function QueryEditor({ tab }: Props) {
                             e.stopPropagation();
                             setDbFilterText('');
                           }}
-                          className="text-[10px] text-muted-foreground hover:text-foreground"
+                          className="text-[10px] text-muted-foreground hover:text-foreground mr-1"
                         >
                           ✕
                         </button>
                       )}
+                      <button
+                        type="button"
+                        title="Reload databases and schemas"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          loadDatabases(true);
+                        }}
+                        disabled={loadingDbs}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={cn("w-3 h-3 text-sky-400", loadingDbs ? "animate-spin" : "")} />
+                      </button>
                     </div>
                     <div className="max-h-56 overflow-y-auto">
                       {loadingDbs && availableDbs.length === 0 ? (

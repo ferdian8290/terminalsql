@@ -64,11 +64,13 @@ export async function connectionRoutes(app: FastifyInstance) {
     const result = rawList.map((c) => {
       let hasBastion = false;
       let dbType: string | undefined = undefined;
+      let database: string | undefined = undefined;
       try {
         const creds = JSON.parse(decrypt(c.encryptedCredentials));
         hasBastion = Boolean(creds.useBastion);
         if (c.type === 'database') {
           dbType = creds.dbType;
+          database = creds.database;
         }
       } catch {}
 
@@ -77,6 +79,7 @@ export async function connectionRoutes(app: FastifyInstance) {
         name: c.name,
         type: c.type,
         dbType,
+        database,
         host: c.host,
         port: c.port,
         username: c.username,
@@ -292,8 +295,27 @@ export async function connectionRoutes(app: FastifyInstance) {
 
     db.insert(connections).values(conn).run();
 
+    let createdDbType: string | undefined = undefined;
+    let createdDatabase: string | undefined = undefined;
+    if (credentials && type === 'database') {
+      createdDbType = (credentials as any).dbType;
+      createdDatabase = (credentials as any).database;
+    }
+
     return reply.status(201).send({
-      connection: { id: conn.id, name, type, host, port, username, folder: conn.folder, tags, color },
+      connection: {
+        id: conn.id,
+        name,
+        type,
+        dbType: createdDbType,
+        database: createdDatabase,
+        host,
+        port,
+        username,
+        folder: conn.folder,
+        tags,
+        color,
+      },
     });
   });
 
@@ -372,7 +394,25 @@ export async function connectionRoutes(app: FastifyInstance) {
       .where(eq(connections.id, id))
       .get();
 
-    return reply.send({ message: 'Connection updated', connection: updated });
+    let updatedDbType: string | undefined = undefined;
+    let updatedDatabase: string | undefined = undefined;
+    try {
+      const currentRaw = db.select({ encryptedCredentials: connections.encryptedCredentials, type: connections.type }).from(connections).where(eq(connections.id, id)).get();
+      if (currentRaw?.encryptedCredentials && currentRaw.type === 'database') {
+        const creds = JSON.parse(decrypt(currentRaw.encryptedCredentials));
+        updatedDbType = creds.dbType;
+        updatedDatabase = creds.database;
+      }
+    } catch {}
+
+    return reply.send({
+      message: 'Connection updated',
+      connection: {
+        ...updated,
+        dbType: updatedDbType,
+        database: updatedDatabase,
+      },
+    });
   });
 
   // DELETE /api/connections/:id

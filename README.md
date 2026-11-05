@@ -2,7 +2,7 @@
 
 > Web-based SSH Terminal · SQL Query Editor · SFTP Manager · Native Desktop App Paradigm.
 
-![Version](https://img.shields.io/badge/Version-1.5.23-purple)
+![Version](https://img.shields.io/badge/Version-1.5.24-purple)
 ![Stack](https://img.shields.io/badge/Backend-Node.js%20%2B%20Fastify-green)
 ![Stack](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-blue)
 ![Database](https://img.shields.io/badge/Engines-MySQL%20%7C%20PostgreSQL%20%7C%20ClickHouse%20%7C%20SQLite-orange)
@@ -338,6 +338,12 @@ Modul SSH Terminal dirancang dengan interaksi setingkat native desktop terminal 
 ---
 
 ## Changelog & Version History
+
+### [v1.5.24] - 2026-11-05
+- **Automatic Schema & Database Cache Invalidation**: Editing a database connection's target schema/database in the modal now immediately purges stale frontend caches (`connSchemas`) and broadcasts a `terminalsql:connection-updated` event.
+- **Real-Time Sidebar & Tab Synchronization**: Active tree nodes and open SQL Editor tabs automatically synchronize with the newly updated schema/database credentials, eliminating ghost displays of outdated tables.
+- **Instant Schema Refresh Controls**: Added one-click manual refresh icons inside the sidebar schema tree header, database selector dropdown, and connection context menus (`Refresh Schema`) for instant on-demand schema reload.
+- **PostgreSQL / Citus Catalog Persistence**: Exposed decrypted `database` and `dbType` attributes across backend connection endpoints (`GET /`, `POST /`, `PATCH /:id`), ensuring the UI consistently recognizes database catalog modifications.
 
 ### [v1.5.23] - 2026-11-02
 - **Documentation & Architectural Standard Update**: Documented the complete PuTTY interaction paradigm, dynamic conditional clipboard context menu, persistent in-app cross-session buffer, SFTP full-width table responsiveness, and pure native vs container deployment separation across `README.md` and `DOCKER_GUIDE.md`.
