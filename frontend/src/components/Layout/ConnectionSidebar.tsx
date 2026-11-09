@@ -240,10 +240,9 @@ export function ConnectionSidebar({ onNewConnection, collapsed, onToggleCollapse
     const isCount = mode === 'count';
 
     if (dbType === 'postgres') {
-      let tableRef = `"${tableName}"`;
-      if (dbName && dbName !== 'default' && dbName !== conn.name && dbName !== 'quality') {
-        tableRef = `"${dbName}"."${tableName}"`;
-      }
+      let tableRef = tableName.includes('.')
+        ? tableName.split('.').map((s) => `"${s}"`).join('.')
+        : `"${tableName}"`;
       return isCount
         ? `SELECT count(*) AS total_rows FROM ${tableRef};\n`
         : `SELECT * FROM ${tableRef} LIMIT 100;\n`;

@@ -152,20 +152,39 @@ export async function databaseRoutes(app: FastifyInstance) {
           pgPort = tunnel.localPort;
         }
 
-        const pgClient = new PgClient({
+        let targetDb = database || creds.database || 'postgres';
+        let pgClient = new PgClient({
           host: pgHost,
           port: pgPort,
           user: conn.username,
           password: creds.dbPassword,
-          database: creds.database,
+          database: targetDb,
           ssl: creds.ssl ? { rejectUnauthorized: false } : undefined,
           connectionTimeoutMillis: 15000,
         });
 
         try {
-          await pgClient.connect();
-          if (database && database !== 'public') {
-            await pgClient.query(`SET search_path TO "${sanitizeIdentifier(database)}", public;`);
+          try {
+            await pgClient.connect();
+          } catch (connErr: any) {
+            if (creds.database && targetDb !== creds.database) {
+              targetDb = creds.database;
+              pgClient = new PgClient({
+                host: pgHost,
+                port: pgPort,
+                user: conn.username,
+                password: creds.dbPassword,
+                database: targetDb,
+                ssl: creds.ssl ? { rejectUnauthorized: false } : undefined,
+                connectionTimeoutMillis: 15000,
+              });
+              await pgClient.connect();
+              if (database && database !== 'public') {
+                await pgClient.query(`SET search_path TO "${sanitizeIdentifier(database)}", public;`);
+              }
+            } else {
+              throw connErr;
+            }
           }
           if (readOnly) await pgClient.query('BEGIN TRANSACTION READ ONLY');
           const result = await pgClient.query(effectiveQuery);
@@ -503,12 +522,15 @@ export async function databaseRoutes(app: FastifyInstance) {
         });
 
         let dbNames: string[] = [];
-        try {
-          const [dbs] = (await connection.query('SHOW DATABASES')) as [any[], any];
-          dbNames = dbs
-            .map((d: any) => Object.values(d)[0] as string)
-            .filter((n) => !['information_schema', 'mysql', 'performance_schema', 'sys'].includes(n));
-        } catch {}
+        const showAll = creds.showAllDatabases !== false;
+        if (showAll) {
+          try {
+            const [dbs] = (await connection.query('SHOW DATABASES')) as [any[], any];
+            dbNames = dbs
+              .map((d: any) => Object.values(d)[0] as string)
+              .filter((n) => !['information_schema', 'mysql', 'performance_schema', 'sys'].includes(n));
+          } catch {}
+        }
         if (dbNames.length === 0 && creds.database) dbNames.push(creds.database);
         if (dbNames.length === 0) dbNames.push('default');
 
@@ -659,24 +681,152 @@ export async function databaseRoutes(app: FastifyInstance) {
             }
           }
 
-          const databases = schemaNames.map((sName) => {
-            const schemaObjects = tablesResult.rows.filter((t: any) => t.schema === sName);
-            return {
-              name: sName,
-              tables: schemaObjects
-                .filter((t: any) => t.kind === 'table')
-                .map((t: any) => ({ name: t.tableName, kind: 'table' })),
-              foreignTables: schemaObjects
-                .filter((t: any) => t.kind === 'foreign_table')
-                .map((t: any) => ({ name: t.tableName, kind: 'foreign_table' })),
-              views: schemaObjects
-                .filter((t: any) => t.kind === 'view')
-                .map((t: any) => ({ name: t.tableName, kind: 'view' })),
-              materializedViews: schemaObjects
-                .filter((t: any) => t.kind === 'materialized_view')
-                .map((t: any) => ({ name: t.tableName, kind: 'materialized_view' })),
-            };
+          const showAll = creds.showAllDatabases !== false;
+          let allDatabases: string[] = [];
+          if (showAll) {
+            try {
+              const dbsRes = await pgClient.query(`
+                SELECT datname 
+                FROM pg_database 
+                WHERE datistemplate = false 
+                  AND datallowconn = true
+                  AND has_database_privilege(current_user, datname, 'CONNECT')
+                ORDER BY datname
+              `);
+              allDatabases = dbsRes.rows.map((r: any) => r.datname);
+            } catch {
+              try {
+                const fallbackDbs = await pgClient.query(`
+                  SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname
+                `);
+                allDatabases = fallbackDbs.rows.map((r: any) => r.datname);
+              } catch {}
+            }
+          }
+
+          if (creds.database && !allDatabases.includes(creds.database)) {
+            allDatabases.unshift(creds.database);
+          }
+          if (allDatabases.length === 0) {
+            allDatabases.push(creds.database || 'postgres');
+          }
+
+          const currentDb = creds.database || allDatabases[0] || 'postgres';
+          const dbMap = new Map<string, any>();
+
+          const formatDbObjects = (objects: any[]) => ({
+            tables: objects
+              .filter((t: any) => t.kind === 'table')
+              .map((t: any) => ({ name: t.schema === 'public' ? t.tableName : `${t.schema}.${t.tableName}`, schema: t.schema, rawName: t.tableName, kind: 'table' })),
+            foreignTables: objects
+              .filter((t: any) => t.kind === 'foreign_table')
+              .map((t: any) => ({ name: t.schema === 'public' ? t.tableName : `${t.schema}.${t.tableName}`, schema: t.schema, rawName: t.tableName, kind: 'foreign_table' })),
+            views: objects
+              .filter((t: any) => t.kind === 'view')
+              .map((t: any) => ({ name: t.schema === 'public' ? t.tableName : `${t.schema}.${t.tableName}`, schema: t.schema, rawName: t.tableName, kind: 'view' })),
+            materializedViews: objects
+              .filter((t: any) => t.kind === 'materialized_view')
+              .map((t: any) => ({ name: t.schema === 'public' ? t.tableName : `${t.schema}.${t.tableName}`, schema: t.schema, rawName: t.tableName, kind: 'materialized_view' })),
           });
+
+          // 1. Current connected DB
+          dbMap.set(currentDb, {
+            name: currentDb,
+            ...formatDbObjects(tablesResult.rows),
+          });
+
+          // 2. If showAll is true and there are other databases, fetch their table lists
+          if (showAll && allDatabases.length > 1) {
+            for (const otherDb of allDatabases.slice(0, 15)) {
+              if (otherDb === currentDb) continue;
+              try {
+                const otherClient = new PgClient({
+                  host: pgHost,
+                  port: pgPort,
+                  user: conn.username,
+                  password: creds.dbPassword,
+                  database: otherDb,
+                  ssl: creds.ssl ? { rejectUnauthorized: false } : undefined,
+                  connectionTimeoutMillis: 4000,
+                });
+                await otherClient.connect();
+                const otherTablesRes = await otherClient.query(`
+                  SELECT 
+                    c.relname as "tableName",
+                    n.nspname as "schema",
+                    CASE c.relkind
+                      WHEN 'r' THEN 'table'
+                      WHEN 'p' THEN 'table'
+                      WHEN 'f' THEN 'foreign_table'
+                      WHEN 'v' THEN 'view'
+                      WHEN 'm' THEN 'materialized_view'
+                      ELSE 'table'
+                    END as "kind"
+                  FROM pg_class c
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                  WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+                    AND c.relkind IN ('r', 'v', 'm', 'f', 'p')
+                  ORDER BY c.relname
+                `);
+
+                try {
+                  const otherColsRes = await otherClient.query(`
+                    SELECT
+                      a.attname AS name,
+                      pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+                      CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS nullable,
+                      c.relname AS "tableName",
+                      n.nspname AS "schema"
+                    FROM pg_attribute a
+                    JOIN pg_class c ON c.oid = a.attrelid
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+                      AND c.relkind IN ('r', 'v', 'm', 'f', 'p')
+                      AND a.attnum > 0 AND NOT a.attisdropped
+                    ORDER BY n.nspname, c.relname, a.attnum
+                    LIMIT 2000
+                  `);
+                  for (const col of otherColsRes.rows) {
+                    const fullKey = `${otherDb}.${col.tableName}`;
+                    const schemaKey = `${col.schema}.${col.tableName}`;
+                    if (!schema[fullKey]) schema[fullKey] = [];
+                    schema[fullKey].push({
+                      name: col.name,
+                      type: col.type,
+                      nullable: col.nullable,
+                    });
+                    if (!schema[col.tableName]) schema[col.tableName] = schema[fullKey];
+                    if (!schema[schemaKey]) schema[schemaKey] = schema[fullKey];
+                  }
+                } catch {}
+
+                dbMap.set(otherDb, {
+                  name: otherDb,
+                  ...formatDbObjects(otherTablesRes.rows),
+                });
+                await otherClient.end().catch(() => {});
+              } catch {
+                dbMap.set(otherDb, {
+                  name: otherDb,
+                  tables: [],
+                  foreignTables: [],
+                  views: [],
+                  materializedViews: [],
+                });
+              }
+            }
+          }
+
+          const databases = showAll
+            ? allDatabases.map((dName) => dbMap.get(dName) || { name: dName, tables: [], foreignTables: [], views: [], materializedViews: [] })
+            : schemaNames.map((sName) => {
+                const schemaObjects = tablesResult.rows.filter((t: any) => t.schema === sName);
+                return {
+                  name: sName,
+                  ...formatDbObjects(schemaObjects),
+                };
+              });
+
           return reply.send({ databases, tables: tablesResult.rows, schema });
         } finally {
           await pgClient.end().catch(() => {});
@@ -738,13 +888,19 @@ export async function databaseRoutes(app: FastifyInstance) {
           http_agent: isHttps ? new https.Agent({ rejectUnauthorized: false }) : undefined,
         });
         try {
-          // 1. Get all databases (excluding system)
-          const dbsResult = await client.query({
-            query: `SELECT name FROM system.databases WHERE name NOT IN ('system', 'information_schema', 'INFORMATION_SCHEMA') ORDER BY name`,
-            format: 'JSONEachRow',
-          });
-          const rawDbs = (await dbsResult.json()) as Array<{ name: string }>;
-          const dbNames = rawDbs.map((d) => d.name);
+          // 1. Get databases (all or single based on showAllDatabases)
+          const showAll = creds.showAllDatabases !== false;
+          let dbNames: string[] = [];
+          if (showAll) {
+            try {
+              const dbsResult = await client.query({
+                query: `SELECT name FROM system.databases WHERE name NOT IN ('system', 'information_schema', 'INFORMATION_SCHEMA') ORDER BY name`,
+                format: 'JSONEachRow',
+              });
+              const rawDbs = (await dbsResult.json()) as Array<{ name: string }>;
+              dbNames = rawDbs.map((d) => d.name);
+            } catch {}
+          }
           if (dbNames.length === 0) {
             dbNames.push(creds.database || 'default');
           }
