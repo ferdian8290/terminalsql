@@ -179,7 +179,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   cursorBlink: true,
   themePreset: 'auto',
   copyOnSelect: true,
-  rightClickAction: 'menu',
+  rightClickAction: 'paste',
 };
 
 interface Props {

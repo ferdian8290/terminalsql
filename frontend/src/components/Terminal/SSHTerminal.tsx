@@ -172,9 +172,6 @@ export function SSHTerminal({ tab }: Props) {
   const [, setTransport] = useState<'ws' | 'http'>('ws');
   const [settings, setSettings] = useState<TerminalSettings>(getStoredSettings);
   const [showSettings, setShowSettings] = useState(false);
-  const [showPasteModal, setShowPasteModal] = useState(false);
-  const [pasteModalText, setPasteModalText] = useState('');
-  const pasteModalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -237,8 +234,8 @@ export function SSHTerminal({ tab }: Props) {
     setContextMenu(null);
     let textToPaste = '';
 
-    // 1. Try reading from modern Clipboard API if supported and permitted (HTTPS / localhost)
-    if (navigator.clipboard?.readText) {
+    // 1. Try reading from modern Clipboard API if supported and permitted (works on HTTPS / localhost / granted permissions)
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
       try {
         const text = await navigator.clipboard.readText();
         if (text && text.length > 0) {
@@ -246,43 +243,24 @@ export function SSHTerminal({ tab }: Props) {
           setAppClipboard(text);
         }
       } catch {
-        // Fallback to in-app memory or paste dialog on insecure HTTP contexts or denied permissions
+        // Fallback to in-app memory clipboard
       }
     }
 
-    // 2. If Clipboard API retrieved text, send directly to active terminal
+    // 2. Fallback to in-app memory clipboard if Clipboard API returned empty
+    if (!textToPaste) {
+      textToPaste = getAppClipboard();
+    }
+
+    // 3. Directly send to active terminal session (instant PuTTY-style paste, zero modal)
     if (textToPaste) {
       const sess = sessionRegistry.get(tab.id);
       if (sess) {
         sendTerminalInput(sess, textToPaste);
       }
-      xtermRef.current?.focus();
-      return;
     }
-
-    // 3. Fallback for insecure HTTP origins (or blocked clipboard access):
-    // Open a sleek, high-density paste dialog with auto-focused textarea so external
-    // text from Notepad can be pasted via Ctrl+V and sent via Enter.
-    setPasteModalText(getAppClipboard() || '');
-    setShowPasteModal(true);
-    setTimeout(() => {
-      pasteModalTextareaRef.current?.focus();
-      pasteModalTextareaRef.current?.select();
-    }, 60);
-  }, [tab.id]);
-
-  const handleConfirmPasteModal = useCallback(() => {
-    if (pasteModalText) {
-      const sess = sessionRegistry.get(tab.id);
-      if (sess) {
-        sendTerminalInput(sess, pasteModalText);
-      }
-      setAppClipboard(pasteModalText);
-    }
-    setShowPasteModal(false);
-    setPasteModalText('');
     xtermRef.current?.focus();
-  }, [tab.id, pasteModalText]);
+  }, [tab.id]);
 
   const handleCopySelection = useCallback(() => {
     setContextMenu(null);
@@ -739,7 +717,6 @@ export function SSHTerminal({ tab }: Props) {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setContextMenu(null);
-        setShowPasteModal(false);
         xtermRef.current?.clearSelection();
         xtermRef.current?.focus();
       }
@@ -1226,101 +1203,6 @@ export function SSHTerminal({ tab }: Props) {
           onSave={applySettings}
           onClose={() => setShowSettings(false)}
         />
-      )}
-
-      {/* Paste External Text Modal (HTTP Clipboard Fallback) */}
-      {showPasteModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 select-none"
-          onClick={() => {
-            setShowPasteModal(false);
-            xtermRef.current?.focus();
-          }}
-        >
-          <div
-            className="w-full max-w-lg bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100 select-text"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 select-none">
-              <div className="flex items-center gap-2">
-                <ClipboardPaste className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                  Paste Text into Terminal
-                </span>
-              </div>
-              <span className="text-[10px] text-zinc-400 font-mono">
-                Press Enter to Send
-              </span>
-            </div>
-
-            {/* Body */}
-            <div className="p-3.5 space-y-2.5">
-              <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed select-none">
-                Paste your external text below (e.g. from Notepad using{' '}
-                <kbd className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 font-mono text-[10px] text-zinc-800 dark:text-zinc-200">
-                  Ctrl+V
-                </kbd>
-                ), then click <strong>Paste to Terminal</strong> or press <strong>Enter</strong>.
-              </p>
-
-              <textarea
-                ref={pasteModalTextareaRef}
-                value={pasteModalText}
-                onChange={(e) => setPasteModalText(e.target.value)}
-                onPaste={(e) => {
-                  const pasted = e.clipboardData?.getData('text/plain');
-                  if (pasted) {
-                    setPasteModalText(pasted);
-                    setAppClipboard(pasted);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleConfirmPasteModal();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    setShowPasteModal(false);
-                    xtermRef.current?.focus();
-                  }
-                }}
-                rows={6}
-                placeholder="Press Ctrl+V to paste copied text here..."
-                className="w-full font-mono text-[11px] p-2.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/90 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-y"
-              />
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-3.5 py-2.5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 select-none">
-              <span className="text-[10px] text-zinc-400">
-                Tip: Pressing <kbd className="font-mono px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700">Ctrl+V</kbd> directly on terminal also pastes natively.
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowPasteModal(false);
-                    xtermRef.current?.focus();
-                  }}
-                  className="h-7 text-xs px-2.5 text-zinc-600 dark:text-zinc-400"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleConfirmPasteModal}
-                  disabled={!pasteModalText.trim()}
-                  className="h-7 text-xs px-3 bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-xs"
-                >
-                  <ClipboardPaste className="w-3.5 h-3.5" />
-                  <span>Paste to Terminal</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
